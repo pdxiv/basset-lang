@@ -1,0 +1,18 @@
+Testing arithmetic operators:
+A = 10
+B = 3
+A + B = 13
+A - B = 7
+A * B = 30
+A / B = 3.33333333333
+A ^ B = 1000
+
+Testing precedence:
+2 + 3 * 4 = 14
+(2 + 3) * 4 = 20
+2 ^ 3 ^ 2 = 512
+
+Testing comparisons:
+ 5 < 10 = 1
+ 5 > 10 = 0
+ 5 = 10 ? 0

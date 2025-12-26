@@ -1,0 +1,5 @@
+ERROR at line 10: Expected '=' but found NUMBER
+  10 X 5
+     ^
+
+Compilation failed with 1 error(s)

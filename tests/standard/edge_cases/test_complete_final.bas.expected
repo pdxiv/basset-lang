@@ -1,0 +1,13 @@
+BASIC Interpreter
+X= 10  Y= 20  Z= 50
+A(0)= 100  A(1)= 200
+CHR$(65)=A
+LEN('HELLO')= 5
+SQR(16)= 4
+ABS(-5)= 5
+I= 1
+I= 2
+I= 3
+X>5: PASS
+Subroutine
+All tests complete

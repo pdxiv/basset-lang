@@ -1,0 +1,35 @@
+=== BASIC COMPILER TEST ===
+
+Variables: X= 10  Y= 20  Z= 50
+
+=== STRING FUNCTIONS ===
+CHR$(65)=A
+STR$(123)=123
+ASC('A')= 65
+VAL('42.5')= 42.5
+LEN('HELLO')= 5
+
+=== MATH FUNCTIONS ===
+SQR(16)= 4
+ABS(-5)= 5
+INT(3.7)= 3
+SGN(-10)= -1
+
+=== ARRAYS ===
+A(0)= 100  A(1)= 200
+B(1,1)= 999
+
+=== FOR/NEXT LOOP ===
+I= 1
+I= 2
+I= 3
+
+=== IF/THEN ===
+X is greater than 5
+Y is less than 30
+
+=== GOSUB/RETURN ===
+In subroutine
+Back from subroutine
+
+=== ALL TESTS COMPLETE ===

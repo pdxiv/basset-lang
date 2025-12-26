@@ -1,0 +1,5 @@
+10 REM Test basic TAB function
+20 PRINT TAB(10); "HELLO"
+30 PRINT TAB(20); "WORLD"
+40 PRINT TAB(5); "A"; TAB(15); "B"; TAB(25); "C"
+50 PRINT "Done"

@@ -1,0 +1,2 @@
+10 FOOBAR X
+20 PRINT "OK"

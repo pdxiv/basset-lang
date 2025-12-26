@@ -1,0 +1,3 @@
+10 DIM A$(2)
+20 LET A$(0) = "TEST"
+30 PRINT A$(0)

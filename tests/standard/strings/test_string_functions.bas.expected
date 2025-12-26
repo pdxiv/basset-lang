@@ -1,0 +1,10 @@
+=== STRING FUNCTIONS ===
+STR$(42) = 42
+CHR$(65) = A
+ASC('A') =  65
+VAL('123.45') =  123.45
+LEN('HELLO') =  5
+=== STRING VARIABLES ===
+A$ = ATARI
+LEN(A$) =  5
+ASC(A$) =  65

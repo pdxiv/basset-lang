@@ -1,0 +1,6 @@
+Test 1: CLEAR - OK
+Test 2: CLEAR , - OK
+Test 3: CLEAR ,32768 - OK
+Test 4: CLEAR ,,2000 - OK
+Test 5: CLEAR ,32768,2000 - OK
+All CLEAR syntax tests passed!

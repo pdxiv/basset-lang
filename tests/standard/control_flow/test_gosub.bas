@@ -1,0 +1,10 @@
+10 REM Test GOSUB/RETURN
+20 PRINT "Main program"
+30 GOSUB 100
+40 PRINT "Back in main"
+50 GOSUB 100
+60 PRINT "Done"
+70 END
+100 REM Subroutine
+110 PRINT "In subroutine"
+120 RETURN

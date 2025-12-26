@@ -1,0 +1,9 @@
+10 REM Test combined multi-statement and compact IF
+20 X=5:Y=10:Z=15
+30 IF X=5 PRINT "X OK":PRINT X
+40 IF Y=10 Z=Z+5:PRINT Z
+50 A=1:B=2:C=3
+60 IF A=1 IF B=2 PRINT "A AND B OK":C=C+10
+70 PRINT C
+80 I=0:IF I=0 I=I+1:PRINT I
+90 END

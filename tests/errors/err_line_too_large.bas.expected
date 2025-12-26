@@ -1,0 +1,5 @@
+ERROR at line 99999: Line number 99999 exceeds maximum (32767)
+  99999 PRINT "TOO BIG"
+        ^
+
+Compilation failed with 1 error(s)

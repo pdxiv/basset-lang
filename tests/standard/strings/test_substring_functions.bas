@@ -1,0 +1,32 @@
+10 REM Test LEFT$, RIGHT$, MID$ substring functions
+20 A$ = "HELLO WORLD"
+30 PRINT "Original:"
+35 PRINT A$
+40 B$ = LEFT$(A$,5)
+45 PRINT "LEFT$(A$,5):"
+46 PRINT B$
+50 B$ = RIGHT$(A$,5)
+52 PRINT "RIGHT$(A$,5):"
+54 PRINT B$
+60 B$ = MID$(A$,7,5)
+62 PRINT "MID$(A$,7,5):"
+64 PRINT B$
+70 PRINT
+80 REM Test with different lengths
+90 A$ = "ATARI BASIC"
+100 PRINT "B$:"
+102 PRINT A$
+110 B$ = LEFT$(A$,5)
+112 PRINT "LEFT$(B$,5):"
+114 PRINT B$
+120 B$ = RIGHT$(A$,6)
+122 PRINT "RIGHT$(B$,6):"
+124 PRINT B$
+130 B$ = MID$(A$,7)
+132 PRINT "MID$(B$,7):"
+134 PRINT B$
+140 B$ = MID$(A$,7,3)
+142 PRINT "MID$(B$,7,3):"
+144 PRINT B$
+150 PRINT
+160 PRINT "=== Substring Tests Passed ==="

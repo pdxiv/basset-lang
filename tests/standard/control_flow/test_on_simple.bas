@@ -1,0 +1,11 @@
+10 REM Simple ON test
+20 X=2
+30 ON X GOTO 100,200,300
+40 PRINT "ERROR: Should not be here"
+50 END
+100 PRINT "Branch 1"
+110 END
+200 PRINT "Branch 2"
+210 END
+300 PRINT "Branch 3"
+310 END

@@ -1,0 +1,3 @@
+After first GOSUB: X= 1
+After POP (no RETURN expected)
+X= 11

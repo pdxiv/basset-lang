@@ -1,0 +1,23 @@
+10 REM Comprehensive control flow test
+20 PRINT "Testing control flow"
+30 REM Test IF
+40 X = 10
+50 IF X = 10 THEN PRINT "IF works"
+60 REM Test FOR loop
+70 PRINT "FOR loop:"
+80 FOR I = 1 TO 3
+90 PRINT I
+100 NEXT I
+110 REM Test GOSUB
+120 GOSUB 200
+130 PRINT "After GOSUB"
+140 REM Test GOTO
+150 GOTO 180
+160 PRINT "Skipped"
+170 GOTO 999
+180 PRINT "GOTO works"
+190 GOTO 999
+200 REM Subroutine
+210 PRINT "In subroutine"
+220 RETURN
+999 END

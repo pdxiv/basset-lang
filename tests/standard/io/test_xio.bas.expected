@@ -1,0 +1,10 @@
+Testing XIO file operations...
+Opened file with XIO
+Closed file with XIO
+Reopened file for reading
+Read bytes: 72  73
+
+Deleting test file...
+File 'xio_test.txt' deleted
+
+=== XIO Test Passed ===

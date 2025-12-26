@@ -1,0 +1,26 @@
+=== Comprehensive File I/O Test ===
+
+Writing data to file...
+Wrote 10 bytes
+
+Reading data from file...
+Byte  1 :  10
+Byte  2 :  20
+Byte  3 :  30
+Byte  4 :  40
+Byte  5 :  50
+Byte  6 :  60
+Byte  7 :  70
+Byte  8 :  80
+Byte  9 :  90
+Byte  10 :  100
+
+Testing STATUS...
+Status before read:  1
+Status after read:  1
+
+Testing NOTE/POINT...
+Position after 5 reads: sector= 0  byte= 5
+Byte at position 2:  30
+
+=== All File I/O Tests Passed ===

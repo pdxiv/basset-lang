@@ -1,0 +1,9 @@
+String array elements:
+A$( 0 ) = ZERO
+A$( 1 ) = ONE
+A$( 2 ) = TWO
+A$( 3 ) = THREE
+A$( 4 ) = FOUR
+A$( 5 ) = FIVE
+
+=== String Array Test Passed ===

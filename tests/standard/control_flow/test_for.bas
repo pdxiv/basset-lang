@@ -1,0 +1,7 @@
+10 REM Test FOR/NEXT loop
+20 PRINT "Counting 1 to 5:"
+30 FOR I = 1 TO 5
+40 PRINT I
+50 NEXT I
+60 PRINT "Done"
+70 END

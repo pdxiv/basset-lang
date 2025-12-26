@@ -1,0 +1,13 @@
+10 REM Test string functions
+20 PRINT "=== STRING FUNCTIONS ==="
+30 PRINT "STR$(42) = ";STR$(42)
+40 PRINT "CHR$(65) = ";CHR$(65)
+50 PRINT "ASC('A') = ";ASC("A")
+60 PRINT "VAL('123.45') = ";VAL("123.45")
+70 PRINT "LEN('HELLO') = ";LEN("HELLO")
+80 PRINT "=== STRING VARIABLES ==="
+90 A$="ATARI"
+100 PRINT "A$ = ";A$
+110 PRINT "LEN(A$) = ";LEN(A$)
+120 PRINT "ASC(A$) = ";ASC(A$)
+130 END

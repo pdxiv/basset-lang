@@ -1,0 +1,64 @@
+BASIC COMPILER TEST
+============================
+
+1. VARIABLES AND EXPRESSIONS:
+  X=
+ 10
+ Y=
+ 20
+ Z=
+ 205
+
+2. ARRAYS (1D AND 2D):
+  A(1)=
+ 100
+ A(2)=
+ 200
+  B(1,1)=
+ 99
+ B(2,3)=
+ 77
+
+3. STRING FUNCTIONS:
+  LEN(A$)=
+ 11
+  ASC(A$)=
+ 65
+  CHR$(65)=
+A
+  STR$(123)=
+123
+
+4. MATH FUNCTIONS:
+  SQR(16)=
+ 4
+  ABS(-42)=
+ 42
+  INT(3.7)=
+ 3
+  SGN(-5)=
+ -1
+
+5. FOR...NEXT LOOP:
+  Loop
+ 1
+  Loop
+ 2
+  Loop
+ 3
+
+6. IF...THEN:
+  X is greater than 5
+
+7. GOSUB...RETURN:
+  In subroutine
+
+8. DATA/READ/RESTORE:
+  First reads:
+ 10
+ 20
+ 30
+  After RESTORE:
+ 10
+
+=== ALL TESTS COMPLETE ===

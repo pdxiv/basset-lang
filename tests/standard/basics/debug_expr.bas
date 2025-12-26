@@ -1,0 +1,5 @@
+10 PRINT "A + B ="
+20 A = 5
+30 B = 3
+40 PRINT A + B
+50 END

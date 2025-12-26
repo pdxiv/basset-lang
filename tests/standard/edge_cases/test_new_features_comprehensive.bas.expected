@@ -1,0 +1,42 @@
+=== Testing Substring Functions ===
+LEFT$(A$,5):
+HELLO
+RIGHT$(A$,5):
+WORLD
+MID$(A$,7,5):
+WORLD
+
+=== Testing String Arrays ===
+NAMES$(
+ 0
+):
+ALICE
+NAMES$(
+ 1
+):
+BOB
+NAMES$(
+ 2
+):
+CHARLIE
+NAMES$(
+ 3
+):
+DIANA
+
+=== Testing String Functions with Arrays ===
+ALI
+BOB
+CHA
+DIA
+
+
+=== Testing 2D String Arrays ===
+NW
+NE
+
+SW
+SE
+
+
+=== All Comprehensive Tests Passed ===

@@ -1,0 +1,3 @@
+10 DIM A$(2)
+20 A$(0) = "HELLO"
+30 PRINT A$(0)

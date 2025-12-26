@@ -1,0 +1,5 @@
+ERROR at line 10: Expected '=' but found IDENTIFIER
+  10 FOOBAR X
+     ^
+
+Compilation failed with 1 error(s)

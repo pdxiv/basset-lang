@@ -1,0 +1,6 @@
+10 X = 1
+20 Y = 2
+30 Z = 3
+40 RESULT = X + Y * Z
+50 PRINT RESULT
+60 END

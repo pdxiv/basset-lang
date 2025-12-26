@@ -1,0 +1,7 @@
+10 A = 5
+20 B = 10
+30 PRINT A + B
+40 PRINT A * B
+50 PRINT B / A
+60 PRINT B ^ 2
+70 END

@@ -1,0 +1,9 @@
+10 REM Test CLEAR statement variations
+20 X = 100
+30 CLEAR
+40 PRINT "After CLEAR: "; X
+50 CLEAR ,32768
+60 PRINT "After CLEAR ,32768"
+70 CLEAR ,,2000
+80 PRINT "After CLEAR ,,2000"
+90 END

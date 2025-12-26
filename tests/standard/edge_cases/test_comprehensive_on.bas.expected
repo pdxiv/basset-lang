@@ -1,0 +1,19 @@
+=== COMPREHENSIVE TEST WITH ON ===
+X= 10  Y= 20  Z= 50
+A(0)= 100  A(1)= 200
+SQR(16)= 4
+ABS(-5)= 5
+I= 1
+I= 2
+I= 3
+X>5: PASS
+Regular subroutine
+Testing ON...GOTO:
+  ON GOTO branch 1
+  ON GOTO branch 2
+  ON GOTO branch 3
+Testing ON...GOSUB:
+  ON GOSUB subroutine 1
+  ON GOSUB subroutine 2
+  ON GOSUB subroutine 3
+=== ALL TESTS COMPLETE ===

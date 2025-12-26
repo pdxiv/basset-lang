@@ -1,0 +1,15 @@
+10 REM Test POP statement
+20 X=0
+30 GOSUB 100
+40 PRINT "After first GOSUB: X=";X
+50 GOSUB 200
+60 POP
+70 PRINT "After POP (no RETURN expected)"
+80 PRINT "X=";X
+90 END
+100 REM Subroutine 1
+110 X=X+1
+120 RETURN
+200 REM Subroutine 2  
+210 X=X+10
+220 GOTO 60

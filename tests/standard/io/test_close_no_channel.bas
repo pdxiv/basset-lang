@@ -1,0 +1,6 @@
+10 REM Test CLOSE without channel parameter
+20 OPEN #1,4,0,"E:TEST.DAT"
+30 PUT #1,65
+40 CLOSE
+50 PRINT "CLOSED"
+60 END

@@ -1,0 +1,11 @@
+Testing RAD mode (default):
+SIN(3.14159/2) =  0.999999999993
+COS(0) =  1
+
+Testing DEG mode:
+SIN(90) =  1
+COS(0) =  1
+SIN(30) =  0.5
+
+Back to RAD mode:
+SIN(1.5708) =  0.999999999993

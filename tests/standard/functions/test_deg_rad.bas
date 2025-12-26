@@ -1,0 +1,15 @@
+10 REM Test DEG and RAD statements
+20 PRINT "Testing RAD mode (default):"
+30 PRINT "SIN(3.14159/2) = ";SIN(1.5708)
+40 PRINT "COS(0) = ";COS(0)
+50 PRINT ""
+60 DEG
+70 PRINT "Testing DEG mode:"
+80 PRINT "SIN(90) = ";SIN(90)
+90 PRINT "COS(0) = ";COS(0)
+100 PRINT "SIN(30) = ";SIN(30)
+110 PRINT ""
+120 RAD
+130 PRINT "Back to RAD mode:"
+140 PRINT "SIN(1.5708) = ";SIN(1.5708)
+150 END

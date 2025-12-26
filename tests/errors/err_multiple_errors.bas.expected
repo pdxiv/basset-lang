@@ -1,0 +1,8 @@
+ERROR at line 10: Syntax error in LET statement
+  10 LET X 5
+           ^
+ERROR at line 20: Expected expression
+  20 Y = 10 +
+             ^
+
+Compilation failed with 2 error(s)

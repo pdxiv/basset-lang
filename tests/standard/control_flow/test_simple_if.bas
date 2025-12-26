@@ -1,0 +1,3 @@
+10 X = 5
+20 IF X < 10 THEN PRINT "YES"
+30 END

@@ -1,0 +1,22 @@
+=== STRING FUNCTIONS ===
+CHR$(65) = A
+STR$(123) = 123
+ASC('Z') =  90
+VAL('456.78') =  456.78
+LEN('HELLO') =  5
+=== MATH FUNCTIONS ===
+SIN(0) =  0
+COS(0) =  1
+SQR(16) =  4
+ABS(-42) =  42
+INT(3.7) =  3
+SGN(-5) =  -1
+EXP(1) =  2.71828182846
+=== CONTROL FLOW ===
+Loop  1
+Loop  2
+Loop  3
+IF works
+=== VARIABLES ===
+X+Y =  300
+String: BASIC

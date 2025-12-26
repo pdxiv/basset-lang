@@ -1,0 +1,136 @@
+# BASIC Implementation - Git Ignore Rules
+
+# ============================================================================
+# Build Artifacts
+# ============================================================================
+
+# Compiled binaries (executables)
+/basset_compile
+/basset_vm
+/basset_disasm
+/basset_asm
+/basset_tokenize
+
+# Object files and build directory
+obj/
+*.o
+
+# Compiled bytecode files (.abc = BASIC Compiled)
+*.abc
+
+# ============================================================================
+# Test Artifacts
+# ============================================================================
+
+# Test output files
+tests/test_output.txt
+tests/*.abc
+tests/*/*.abc
+
+# Temporary test files created during test runs
+channel*.txt
+test_*.txt
+*.dat
+
+# ============================================================================
+# Editor and IDE Files
+# ============================================================================
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+.*.sw?
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# JetBrains IDEs
+.idea/
+*.iml
+
+# ============================================================================
+# OS Generated Files
+# ============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ============================================================================
+# Temporary and Log Files
+# ============================================================================
+
+# General temporary files
+*.tmp
+*.temp
+*.log
+
+# Core dumps
+core
+core.*
+vgcore.*
+
+# ============================================================================
+# Development Scratch Files (optional - uncomment if needed)
+# ============================================================================
+
+# Uncomment these if you want to ignore scratch test files in root directory
+# /test_*.bas
+# /test_*.abc
+# /oregon.bas
+# /oregon.abc
+# /adventure.bas
+# /adventure.abc
+# /*.dat
+
+# ============================================================================
+# Git and Version Control
+# ============================================================================
+
+# Git conflict markers
+*.orig
+*.BACKUP.*
+*.BASE.*
+*.LOCAL.*
+*.REMOTE.*
+
+# ============================================================================
+# Documentation Build Artifacts (if added later)
+# ============================================================================
+
+# Doxygen
+docs/html/
+docs/latex/
+doxygen_warnings.txt
+
+# ============================================================================
+# Backup Files
+# ============================================================================
+
+*.bak
+*.backup
+*-backup

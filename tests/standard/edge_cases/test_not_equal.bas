@@ -1,0 +1,7 @@
+10 REM Test <> (not equal) operator
+20 X=5
+30 IF X<>3 PRINT "X IS NOT 3"
+40 IF X<>5 PRINT "X IS NOT 5"
+50 Y=10
+60 IF Y<>X PRINT "Y NOT EQUAL X"
+70 END

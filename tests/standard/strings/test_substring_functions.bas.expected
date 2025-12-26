@@ -1,0 +1,21 @@
+Original:
+HELLO WORLD
+LEFT$(A$,5):
+HELLO
+RIGHT$(A$,5):
+WORLD
+MID$(A$,7,5):
+WORLD
+
+B$:
+ATARI BASIC
+LEFT$(B$,5):
+ATARI
+RIGHT$(B$,6):
+ BASIC
+MID$(B$,7):
+BASIC
+MID$(B$,7,3):
+BAS
+
+=== Substring Tests Passed ===

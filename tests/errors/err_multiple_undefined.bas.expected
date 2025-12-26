@@ -1,0 +1,4 @@
+ERROR at line 10: Undefined line number 100 in GOTO
+ERROR at line 30: Undefined line number 500 in GOSUB
+
+Compilation failed with 2 error(s)

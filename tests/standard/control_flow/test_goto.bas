@@ -1,0 +1,7 @@
+10 REM Test GOTO
+20 X = 0
+30 X = X + 1
+40 PRINT X
+50 IF X < 5 THEN GOTO 30
+60 PRINT "Done"
+70 END

@@ -1,0 +1,5 @@
+ERROR at line 50: Line number 50 must be greater than previous line 100
+  50 PRINT "SECOND"
+     ^
+
+Compilation failed with 1 error(s)

@@ -1,0 +1,11 @@
+10 REM Test various PRINT formats
+20 PRINT "Start"
+30 PRINT
+40 PRINT
+50 PRINT "Middle"
+60 PRINT
+70 FOR I=1 TO 2
+80 PRINT "Loop";I
+90 PRINT
+100 NEXT I
+110 PRINT "End"

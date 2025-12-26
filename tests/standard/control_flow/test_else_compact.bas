@@ -1,0 +1,4 @@
+10 REM Test ELSE with compact IF (no THEN keyword)
+20 A=0
+30 IF A=0 PRINT"A IS ZERO" ELSE PRINT"A IS NOT ZERO"
+40 PRINT"DONE"

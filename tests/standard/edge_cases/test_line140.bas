@@ -1,0 +1,1 @@
+140 PRINT "ASC('A')=";ASC("A")

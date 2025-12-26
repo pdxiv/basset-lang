@@ -1,0 +1,39 @@
+Tokenizing: tests/tokenizer/test_operators.bas
+════════════════════════════════════════════════════════════
+Line  Col    Type          Name                  Value/Text
+════════════════════════════════════════════════════════════
+1     0      0x6B/107     NUMBER                10
+1     3      0x6D/109     IDENTIFIER            A
+1     5      0x60/96      =                     
+1     7      0x6B/107     NUMBER                5
+1     9      0x63/99      +                     
+1     11     0x6B/107     NUMBER                3
+1     13     0x62/98      *                     
+1     15     0x6B/107     NUMBER                2
+1     17     0x64/100     -                     
+1     19     0x6B/107     NUMBER                1
+1     21     0x65/101     /                     
+1     23     0x6B/107     NUMBER                2
+1     25     0x61/97      ^                     
+1     27     0x6B/107     NUMBER                3
+1     28     0x54/84      CR                    
+2     0      0x6B/107     NUMBER                20
+2     3      0x07/7       IF                    
+2     6      0x6D/109     IDENTIFIER            A
+2     8      0x5F/95      >                     
+2     10     0x6B/107     NUMBER                10
+2     13     0x68/104     AND                   
+2     17     0x6D/109     IDENTIFIER            B
+2     19     0x5B/91      <=                    
+2     22     0x6B/107     NUMBER                5
+2     24     0x67/103     OR                    
+2     27     0x6D/109     IDENTIFIER            C
+2     29     0x5C/92      <>                    
+2     32     0x6B/107     NUMBER                0
+2     34     0x59/89      THEN                  
+2     39     0x20/32      PRINT                 
+2     45     0x6D/109     IDENTIFIER            A
+2     46     0x54/84      CR                    
+3     0      TOK_EOF       EOF                 
+════════════════════════════════════════════════════════════
+Total tokens: 32

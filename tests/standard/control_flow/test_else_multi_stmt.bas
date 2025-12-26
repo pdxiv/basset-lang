@@ -1,0 +1,4 @@
+10 REM Test multiple statements in THEN and ELSE
+20 A=0
+30 IF A=1 THEN B=5:PRINT"THEN" ELSE B=10:PRINT"ELSE"
+40 PRINT"B=";B

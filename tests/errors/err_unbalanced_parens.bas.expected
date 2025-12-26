@@ -1,0 +1,5 @@
+ERROR at line 10: Expected ')'
+  10 X = (5 + 3
+               ^
+
+Compilation failed with 1 error(s)

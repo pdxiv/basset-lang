@@ -1,0 +1,4 @@
+10 REM Test ELSE with simple statement
+20 A=0
+30 IF A=1 THEN PRINT"YES" ELSE PRINT"NO"
+40 PRINT"DONE"

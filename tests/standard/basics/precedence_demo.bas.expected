@@ -1,0 +1,19 @@
+Exponentiation (highest):
+2 ^ 3 ^ 2 =  512
+Expected: 512 (right associative)
+
+Multiplication and Division:
+10 * 2 / 5 =  4
+Expected: 4
+
+Addition and Subtraction:
+10 + 5 - 3 =  12
+Expected: 12
+
+Mixed precedence:
+2 + 3 * 4 ^ 2 =  50
+Expected: 50
+
+Comparison operators:
+5 < 10 AND 3 > 1 =  1
+Expected: 1 (true)

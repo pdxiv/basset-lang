@@ -1,0 +1,5 @@
+ERROR at line 1: Program line must start with a line number (found PRINT)
+  PRINT "HELLO"
+  ^
+
+Compilation failed with 1 error(s)

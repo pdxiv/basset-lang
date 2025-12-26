@@ -1,0 +1,11 @@
+10 REM Test string comparisons
+20 A$="HELLO"
+30 B$="HELLO"
+40 C$="WORLD"
+50 IF A$=B$ THEN PRINT "A equals B"
+60 IF A$<>C$ THEN PRINT "A not equal C"
+70 IF A$<C$ THEN PRINT "A less than C"
+80 IF C$>A$ THEN PRINT "C greater than A"
+90 IF A$<=B$ THEN PRINT "A less or equal B"
+100 IF C$>=A$ THEN PRINT "C greater or equal A"
+110 PRINT "Done"

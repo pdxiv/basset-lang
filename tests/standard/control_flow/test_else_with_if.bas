@@ -1,0 +1,5 @@
+10 REM Test ELSE with IF in ELSE clause (like line 150)
+20 A=0
+30 B=10
+40 IF A=1 THEN PRINT"A" ELSE IF B<20 PRINT"B SMALL"
+50 PRINT"DONE"
