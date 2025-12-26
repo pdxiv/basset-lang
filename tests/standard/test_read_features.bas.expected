@@ -1,0 +1,16 @@
+Multiple variables:
+ 10 20 30
+
+Mixed types:
+Hello 42 World 3.14
+
+Numeric to string:
+123 456
+
+Sequential DATA statements:
+ 1 2 3
+
+Read one more value:
+ 999
+After RESTORE (back to start):
+ 10 20

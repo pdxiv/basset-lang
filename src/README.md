@@ -1,6 +1,6 @@
 # Source Code Organization
 
-This directory contains the core library modules for the Classic BASIC compiler and virtual machine.
+This directory contains the core library modules for Basset BASIC.
 
 ## Compilation Pipeline Modules
 
@@ -32,9 +32,11 @@ This directory contains the core library modules for the Classic BASIC compiler 
 
 **compiler.c / compiler.h**
 - Walks parse tree and generates bytecode
-- Line number table generation
-- Variable name table generation
+- Line number table generation with forward reference resolution
+- Variable name table generation (enforces 128 variable limit per type)
 - Constant pool management
+- Direct address resolution for GOTO/GOSUB (compile-time optimization)
+- Address table generation for ON...GOTO/GOSUB statements
 
 **bytecode.h**
 - Bytecode instruction definitions (opcodes)
@@ -45,9 +47,10 @@ This directory contains the core library modules for the Classic BASIC compiler 
 **vm.c / vm.h**
 - Virtual machine / bytecode interpreter
 - Executes compiled bytecode
-- Variable storage (numeric and string)
-- Control flow stacks (FOR/NEXT, GOSUB/RETURN)
+- Variable storage (numeric and string, 128 slots each)
+- Control flow stacks (FOR/NEXT with mismatch detection, GOSUB/RETURN)
 - I/O operations (PRINT, INPUT, file I/O)
+- Enhanced error messages with variable name reporting
 
 ### Support Modules
 

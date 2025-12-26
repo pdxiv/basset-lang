@@ -1,5 +1,6 @@
 /* syntax_tables.c - Table-Driven BASIC Syntax Tables Implementation */
 #include "syntax_tables.h"
+#include "parser.h"
 #include <stddef.h>
 #include <stdio.h>
 
@@ -116,28 +117,108 @@ const KeywordEntry keyword_table[] = {
 const int keyword_table_size = sizeof(keyword_table) / sizeof(KeywordEntry) - 1;
 
 /* Operator precedence table (compatible with classic BASIC) */
+/* Now with enum-based parse actions (purely data-driven) */
 const OperatorEntry operator_table[] = {
-    /* Token, Go-on-stack, Come-off-stack, Executor */
-    {TOK_CEXP,    8, 1, NULL},   /* ^ exponentiation */
-    {TOK_CMUL,    5, 5, NULL},   /* * multiplication */
-    {TOK_CDIV,    5, 5, NULL},   /* / division */
-    {TOK_CPLUS,   4, 4, NULL},   /* + addition */
-    {TOK_CMINUS,  4, 4, NULL},   /* - subtraction */
-    {TOK_CEQ,     2, 2, NULL},   /* = equal */
-    {TOK_CLT,     2, 2, NULL},   /* < less than */
-    {TOK_CGT,     2, 2, NULL},   /* > greater than */
-    {TOK_CLE,     2, 2, NULL},   /* <= less or equal */
-    {TOK_CGE,     2, 2, NULL},   /* >= greater or equal */
-    {TOK_CNE,     2, 2, NULL},   /* <> not equal */
-    {TOK_CAND,    1, 1, NULL},   /* AND logical and */
-    {TOK_COR,     1, 1, NULL},   /* OR logical or */
-    {TOK_CNOT,    7, 7, NULL},   /* NOT logical not */
-    {TOK_CUPLUS,  7, 7, NULL},   /* unary + */
-    {TOK_CUMINUS, 7, 7, NULL},   /* unary - */
-    {0, 0, 0, NULL}  /* Sentinel */
+    /* Token, Go-on-stack, Come-off-stack, Executor, Nud, Led */
+    
+    /* Atoms/Primatives (only nud) */
+    {TOK_NUMBER,  0, 0, NULL, PA_NUMBER_LITERAL, PA_NONE},
+    {TOK_STRING,  0, 0, NULL, PA_STRING_LITERAL, PA_NONE},
+    {TOK_IDENT,   0, 0, NULL, PA_VARIABLE, PA_NONE},
+    {TOK_CLPRN,   0, 0, NULL, PA_PARENTHESIZED, PA_NONE},
+    
+    /* Binary operators (only led) */
+    {TOK_CEXP,    8, 1, NULL, PA_NONE, PA_BINARY_OP},   /* ^ exponentiation */
+    {TOK_CMUL,    5, 5, NULL, PA_NONE, PA_BINARY_OP},   /* * multiplication */
+    {TOK_CDIV,    5, 5, NULL, PA_NONE, PA_BINARY_OP},   /* / division */
+    {TOK_CEQ,     2, 2, NULL, PA_NONE, PA_BINARY_OP},   /* = equal */
+    {TOK_CLT,     2, 2, NULL, PA_NONE, PA_BINARY_OP},   /* < less than */
+    {TOK_CGT,     2, 2, NULL, PA_NONE, PA_BINARY_OP},   /* > greater than */
+    {TOK_CLE,     2, 2, NULL, PA_NONE, PA_BINARY_OP},   /* <= less or equal */
+    {TOK_CGE,     2, 2, NULL, PA_NONE, PA_BINARY_OP},   /* >= greater or equal */
+    {TOK_CNE,     2, 2, NULL, PA_NONE, PA_BINARY_OP},   /* <> not equal */
+    {TOK_CAND,    1, 1, NULL, PA_NONE, PA_BINARY_OP},   /* AND logical and */
+    {TOK_COR,     1, 1, NULL, PA_NONE, PA_BINARY_OP},   /* OR logical or */
+    
+    /* Dual-role operators (both nud and led) */
+    {TOK_CPLUS,   4, 4, NULL, PA_UNARY_PLUS, PA_BINARY_OP},   /* + addition / unary plus */
+    {TOK_CMINUS,  4, 4, NULL, PA_UNARY_MINUS, PA_BINARY_OP},  /* - subtraction / unary minus */
+    
+    /* Unary-only operators (only nud) */
+    {TOK_CNOT,    7, 7, NULL, PA_UNARY_NOT, PA_NONE},   /* NOT logical not */
+    {TOK_CUPLUS,  7, 7, NULL, PA_NONE, PA_NONE},   /* unary + token (unused, handled by TOK_CPLUS) */
+    {TOK_CUMINUS, 7, 7, NULL, PA_NONE, PA_NONE},   /* unary - token (unused, handled by TOK_CMINUS) */
+    
+    /* Functions (all use nud for function call parsing) */
+    {TOK_CSIN,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CCOS,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CATN,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CEXP_F,  0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CLOG,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CCLOG,   0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CSQR,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CABS,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CINT,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CSGN,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CRND,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CFRE,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CPEEK,   0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CPADD,   0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CSTIK,   0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CPTRG,   0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CSTRG,   0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CASC,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CVAL,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CLEN,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CADR,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CSTR,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CCHR,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CLEFT,   0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CRIGHT,  0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CMID,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CTAB,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    
+    {0, 0, 0, NULL, PA_NONE, PA_NONE}  /* Sentinel */
 };
 
 const int operator_table_size = sizeof(operator_table) / sizeof(OperatorEntry) - 1;
+
+/* Function metadata table (for arity validation and error messages) */
+const FunctionEntry function_table[] = {
+    /* Numeric functions */
+    {TOK_CSIN,    "SIN",    1, 1},
+    {TOK_CCOS,    "COS",    1, 1},
+    {TOK_CATN,    "ATN",    1, 1},
+    {TOK_CEXP_F,  "EXP",    1, 1},
+    {TOK_CLOG,    "LOG",    1, 1},
+    {TOK_CCLOG,   "CLOG",   1, 1},
+    {TOK_CSQR,    "SQR",    1, 1},
+    {TOK_CABS,    "ABS",    1, 1},
+    {TOK_CINT,    "INT",    1, 1},
+    {TOK_CSGN,    "SGN",    1, 1},
+    {TOK_CRND,    "RND",    1, 1},
+    {TOK_CFRE,    "FRE",    1, 1},
+    {TOK_CPEEK,   "PEEK",   1, 1},
+    {TOK_CPADD,   "PADDLE",  1, 1},
+    {TOK_CSTIK,   "STICK",  1, 1},
+    {TOK_CPTRG,   "PTRIG",  1, 1},
+    {TOK_CSTRG,   "STRIG",  1, 1},
+    /* String functions */
+    {TOK_CASC,    "ASC",    1, 1},
+    {TOK_CVAL,    "VAL",    1, 1},
+    {TOK_CLEN,    "LEN",    1, 1},
+    {TOK_CADR,    "ADR",    1, 1},
+    {TOK_CSTR,    "STR$",   1, 1},
+    {TOK_CCHR,    "CHR$",   1, 1},
+    {TOK_CLEFT,   "LEFT$",  2, 2},
+    {TOK_CRIGHT,  "RIGHT$", 2, 2},
+    {TOK_CMID,    "MID$",   2, 3},
+    /* Special functions */
+    {TOK_CTAB,    "TAB",    1, 1},
+    {0, NULL, 0, 0}  /* Sentinel */
+};
+
+const int function_table_size = sizeof(function_table) / sizeof(FunctionEntry) - 1;
 
 /* Helper macro for syntax table construction */
 #define SYN_TOK(t) {(t) | TC_TERMINAL, {0, 0, 0}}
@@ -512,9 +593,16 @@ static const SyntaxEntry syn_eos[] = {
 
 /* ===== STATEMENT SYNTAX RULES ===== */
 
-/* <REM> = (consume rest of line) # */
-/* REM is handled specially - see parser.c */
+/* <REM> = <REM_BODY> <EOS> # */
 static const SyntaxEntry syn_rem[] = {
+    SYN_NT(NT_REM_BODY),
+    SYN_NT(NT_EOS),
+    SYN_END
+};
+
+/* <REM_BODY> = (special handling - consumes until EOS) # */
+static const SyntaxEntry syn_rem_body[] = {
+    SYN_EPS,
     SYN_END
 };
 
@@ -872,8 +960,46 @@ static const SyntaxEntry syn_d1[] = {
     SYN_END
 };
 
-/* <DATA> = (consume rest of line) # */
+/* <DATA> = <DATA_LIST> <EOS> # */
 static const SyntaxEntry syn_data[] = {
+    SYN_NT(NT_DATA_LIST),
+    SYN_NT(NT_EOS),
+    SYN_END
+};
+
+/* <DATA_LIST> = <DATA_VAL> <DATA_TAIL> # */
+static const SyntaxEntry syn_data_list[] = {
+    SYN_NT(NT_DATA_VAL),
+    SYN_NT(NT_DATA_TAIL),
+    SYN_END
+};
+
+/* <DATA_TAIL> = , <DATA_VAL> <DATA_TAIL> | , <DATA_TAIL> | ε # */
+static const SyntaxEntry syn_data_tail[] = {
+    SYN_ALT,
+    SYN_TOK(TOK_CCOM),
+    SYN_NT(NT_DATA_VAL),
+    SYN_NT(NT_DATA_TAIL),
+    SYN_ALT,
+    SYN_TOK(TOK_CCOM),
+    SYN_NT(NT_DATA_TAIL),
+    SYN_ALT,
+    SYN_EPS,
+    SYN_END
+};
+
+/* <DATA_VAL> = NUMBER | STRING | IDENT | - | + # */
+static const SyntaxEntry syn_data_val[] = {
+    SYN_ALT,
+    SYN_TOK(TOK_NUMBER),
+    SYN_ALT,
+    SYN_TOK(TOK_STRING),
+    SYN_ALT,
+    SYN_TOK(TOK_IDENT),
+    SYN_ALT,
+    SYN_TOK(TOK_CMINUS),
+    SYN_ALT,
+    SYN_TOK(TOK_CPLUS),
     SYN_END
 };
 
@@ -1338,6 +1464,7 @@ void init_syntax_tables(void) {
     
     /* Statement rules */
     syntax_rule_table[NT_REM] = syn_rem;
+    syntax_rule_table[NT_REM_BODY] = syn_rem_body;
     syntax_rule_table[NT_LET] = syn_let;
     syntax_rule_table[NT_PRINT] = syn_print;
     syntax_rule_table[NT_PR1] = syn_pr1;
@@ -1377,6 +1504,9 @@ void init_syntax_tables(void) {
     syntax_rule_table[NT_OPD] = syn_opd;
     syntax_rule_table[NT_D1] = syn_d1;
     syntax_rule_table[NT_SDATA] = syn_data;
+    syntax_rule_table[NT_DATA_LIST] = syn_data_list;
+    syntax_rule_table[NT_DATA_TAIL] = syn_data_tail;
+    syntax_rule_table[NT_DATA_VAL] = syn_data_val;
     syntax_rule_table[NT_RESTORE] = syn_restore;
     syntax_rule_table[NT_DIM] = syn_dim;
     syntax_rule_table[NT_NSMAT] = syn_nsmat;
@@ -1435,6 +1565,32 @@ NonTerminal get_statement_rule(unsigned char token) {
     }
     
     return (NonTerminal)-1;  /* Not found */
+}
+
+/* Get function metadata from token */
+const FunctionEntry* get_function_metadata(unsigned char token) {
+    int i;
+    
+    for (i = 0; i < function_table_size; i++) {
+        if (function_table[i].token == token) {
+            return &function_table[i];
+        }
+    }
+    
+    return NULL;  /* Not found */
+}
+
+/* Get operator entry from token */
+const OperatorEntry* get_operator_entry(unsigned char token) {
+    int i;
+    
+    for (i = 0; i < operator_table_size; i++) {
+        if (operator_table[i].token == token) {
+            return &operator_table[i];
+        }
+    }
+    
+    return NULL;  /* Not found */
 }
 
 /* Check if token is terminal */

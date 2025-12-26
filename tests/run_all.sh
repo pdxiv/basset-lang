@@ -29,6 +29,14 @@ if [ ! -f "./basset_compile" ] || [ ! -f "./basset_vm" ]; then
 fi
 
 echo "═══════════════════════════════════════════════════════════════"
+echo " Table Validation"
+echo "═══════════════════════════════════════════════════════════════"
+echo ""
+./tests/validate_tables.sh
+VALIDATION_EXIT=$?
+
+echo ""
+echo "═══════════════════════════════════════════════════════════════"
 echo " Standard Functional Tests"
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
@@ -56,6 +64,12 @@ echo "╔═══════════════════════�
 echo "║                    OVERALL RESULTS                         ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 
+if [ $VALIDATION_EXIT -eq 0 ]; then
+    echo "✓ Table validation: PASS"
+else
+    echo "✗ Table validation: FAIL"
+fi
+
 if [ $STANDARD_EXIT -eq 0 ]; then
     echo "✓ Standard tests: PASS"
 else
@@ -76,7 +90,7 @@ fi
 
 echo ""
 
-if [ $STANDARD_EXIT -eq 0 ] && [ $ERRORS_EXIT -eq 0 ] && [ $TOKENIZER_EXIT -eq 0 ]; then
+if [ $VALIDATION_EXIT -eq 0 ] && [ $STANDARD_EXIT -eq 0 ] && [ $ERRORS_EXIT -eq 0 ] && [ $TOKENIZER_EXIT -eq 0 ]; then
     echo "All test suites completed successfully!"
     exit 0
 else

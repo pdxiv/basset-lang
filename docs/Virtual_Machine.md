@@ -2,7 +2,7 @@
 
 ## Overview
 
-The BASIC Virtual Machine (VM) is a bytecode interpreter that executes compiled BASIC programs. It implements a stack-based architecture with separate numeric and string stacks, variable storage, array support, and control flow mechanisms.
+The Basset BASIC Virtual Machine (VM) is a bytecode interpreter that executes compiled BASIC programs. It implements a stack-based architecture with separate numeric and string stacks, variable storage, array support, and control flow mechanisms.
 
 ## Design Principles
 
@@ -129,18 +129,20 @@ typedef struct {
 ## Variable Storage
 
 ### Numeric Variables
-- **Slots**: 128 slots (0-127)
+- **Slots**: 128 slots (0-127) - **Limit enforced at compile time**
 - **Type**: `double` (IEEE 754 double-precision)
 - **Initial Value**: 0.0
 - **Access**: Direct array indexing
 - **Compiler**: Assigns slot numbers during compilation
+- **Limit Check**: Compilation fails with clear error if exceeded
 
 ### String Variables
-- **Slots**: 128 slots (0-127)
+- **Slots**: 128 slots (0-127) - **Limit enforced at compile time**
 - **Type**: `char*` (dynamically allocated)
 - **Initial Value**: Empty string `""`
 - **Memory**: Automatic deallocation when reassigned
 - **Compiler**: Assigns separate slot numbers from numeric variables
+- **Limit Check**: Compilation fails with clear error if exceeded
 
 ### Variable Name Table
 ```c
@@ -170,6 +172,7 @@ typedef struct {
 ### Dimensions
 - **1D Arrays**: `DIM A(10)` → 11 elements (0 to 10)
 - **2D Arrays**: `DIM B(5,3)` → 6×4 = 24 elements (0,0) to (5,3)
+- **Maximum Arrays**: 64 total arrays - **Limit enforced at compile time**
 - **Maximum Size**: 32767 per dimension (classic BASIC limitation)
 
 ### Storage
@@ -206,7 +209,8 @@ typedef struct {
 **Operation**:
 1. **FOR**: Pushes loop context to stack
 2. **NEXT**: Increments variable, checks limit, jumps back or pops stack
-3. **Overflow**: More than 32 nested FOR loops triggers error
+3. **Variable Validation**: NEXT checks that variable matches FOR variable, produces descriptive error if mismatch
+4. **Overflow**: More than 32 nested FOR loops triggers error
 
 ### GOSUB/RETURN Stack
 
@@ -603,6 +607,9 @@ Can set breakpoints at:
 
 ### Optimizations
 - **Constant folding**: Already done at compile time
+- **Direct address jumps**: GOTO/GOSUB use PC addresses, not line number lookups
+- **Address tables**: ON...GOTO/GOSUB store pre-resolved addresses
+- **Forward reference resolution**: All line number targets resolved during compilation
 - **Dead code elimination**: Possible with control flow analysis
 - **Register allocation**: Convert stack operations to registers
 
@@ -626,12 +633,15 @@ Can set breakpoints at:
 
 The Virtual Machine provides:
 - **Dual stack architecture** (numeric and string)
-- **128 variable slots** each for numeric and string
+- **128 variable slots** each for numeric and string (enforced at compile time)
+- **64 array slots maximum** (enforced at compile time)
 - **Dynamic arrays** (1D and 2D, numeric and string)
 - **32-level FOR stack** and **64-level GOSUB stack**
 - **8 I/O channels** with file operations
-- **Line number mapping** for GOTO/GOSUB
-- **TRAP error handling**
+- **Direct address jumps** for GOTO/GOSUB (no runtime line lookups)
+- **Optimized ON...GOTO/GOSUB** with pre-built address tables
+- **TRAP error handling** with descriptive error messages
+- **FOR/NEXT variable mismatch detection**
 - **DEG/RAD trigonometric modes**
 - **DATA statement support**
 - **~140 bytecode opcodes**

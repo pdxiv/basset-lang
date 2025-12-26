@@ -1,6 +1,6 @@
 # Error Test Suite
 
-This directory contains test cases for error detection and reporting in the BASIC compiler.
+This directory contains test cases for error detection and reporting in Basset BASIC.
 
 ## Test Categories
 

@@ -92,6 +92,9 @@ typedef struct {
     char *input_ptr;             /* Current position in input buffer */
     int input_available;         /* 1 if there's unparsed input in buffer */
     
+    /* Simulated memory buffer for PEEK/POKE (64KB) */
+    unsigned char *memory;       /* 64KB memory buffer (0-65535) */
+    
     /* Reference to compiled program */
     CompiledProgram *program;
     

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document provides a comprehensive reference for all tokens used in the BASIC compiler. Tokens are the fundamental units produced by the lexical analyzer (tokenizer) and consumed by the parser. Each token represents a keyword, operator, constant, or identifier.
+This document provides a comprehensive reference for all tokens used in Basset BASIC. Tokens are the fundamental units produced by the lexical analyzer (tokenizer) and consumed by the parser. Each token represents a keyword, operator, constant, or identifier.
 
 ## Token Organization
 

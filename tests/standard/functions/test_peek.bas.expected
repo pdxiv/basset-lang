@@ -1,0 +1,5 @@
+Testing PEEK function
+PEEK(0) =  0
+PEEK(1024) =  0
+PEEK(65535) =  0
+PEEK tests passed

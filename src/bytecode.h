@@ -116,7 +116,6 @@ typedef struct {
 #define OP_FUNC_INT     0x7E  /* Shifted from 0x7D */
 #define OP_FUNC_RND     0x7F  /* Shifted from 0x7E */
 #define OP_FUNC_SGN     0x80  /* Shifted from 0x7F */
-#define OP_FUNC_PEEK    0x80
 
 /* System */
 #define OP_TRAP         0x81
@@ -132,5 +131,7 @@ typedef struct {
 #define OP_POP_GOSUB    0x8B  /* Pop GOSUB stack without RETURN */
 #define OP_NOP          0x8C
 #define OP_HALT         0x8D
+#define OP_FUNC_PEEK    0x8E  /* PEEK memory function */
+#define OP_POKE         0x8F  /* POKE memory statement */
 
 #endif /* BYTECODE_H */

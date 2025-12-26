@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document provides a comprehensive reference for all bytecode opcodes used in the BASIC virtual machine. Each instruction is documented with its hex value, operand requirements, stack effects, and semantic behavior.
+This document provides a comprehensive reference for all bytecode opcodes used in the Basset BASIC virtual machine. Each instruction is documented with its hex value, operand requirements, stack effects, and semantic behavior.
 
 ## Instruction Format
 
@@ -622,12 +622,6 @@ All math functions pop operands from numeric stack and push results to numeric s
 - **Stack Effect**: `[x] → [sign(x)]`
 - **Description**: Returns -1.0 if x < 0, 0.0 if x == 0, 1.0 if x > 0
 
-### OP_FUNC_PEEK (0x80)
-**PEEK function**
-
-- **Stack Effect**: `[address] → [value]`
-- **Description**: Reads byte from memory address (same opcode as SGN - context-dependent)
-
 ---
 
 ## System Operations (0x81-0x8D)
@@ -699,6 +693,12 @@ All math functions pop operands from numeric stack and push results to numeric s
 
 - **Description**: Stops VM execution immediately
 
+### OP_FUNC_PEEK (0x8E)
+**PEEK function**
+
+- **Stack Effect**: `[address] → [value]`
+- **Description**: Reads byte from memory address. For safety, always returns 0 in this implementation.
+
 ---
 
 ## Execution Model
@@ -714,10 +714,12 @@ Most operations work on one stack or the other. Some operations (like STR$, VAL,
 
 ### Variable Storage
 
-- **128 numeric variable slots** (0-127)
-- **128 string variable slots** (0-127)
+- **128 numeric variable slots** (0-127) - Limit enforced at compile time
+- **128 string variable slots** (0-127) - Limit enforced at compile time
+- **64 array slots maximum** - Limit enforced at compile time
 - Variables are allocated by compiler during AST analysis
 - Arrays stored separately with DIM allocation
+- Exceeding limits produces clear compile-time error messages
 
 ### Control Flow Stacks
 

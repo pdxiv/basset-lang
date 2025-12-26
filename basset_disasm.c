@@ -1,6 +1,7 @@
 /* basset_disasm.c - Disassemble bytecode to human-readable text */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "bytecode.h"
 #include "bytecode_file.h"
 #include "compiler.h"
@@ -23,8 +24,8 @@ static const char* opcode_names[] = {
     /* 0x68 */ "INPUT_PROMPT", "OPEN", "CLOSE", "GET", "PUT", "NOTE", "POINT", "STATUS",
     /* 0x70 */ "XIO", "DATA_READ_NUM", "DATA_READ_STR", "SET_PRINT_CHANNEL", "FUNC_SIN", "FUNC_COS", "FUNC_TAN", "FUNC_ATN",
     /* 0x78 */ "FUNC_EXP", "FUNC_LOG", "FUNC_CLOG", "FUNC_SQR", "FUNC_ABS", "FUNC_INT", "FUNC_RND", "FUNC_SGN",
-    /* 0x80 */ "FUNC_PEEK", "TRAP", "TRAP_DISABLE", "END", "STOP", "RESTORE", "RESTORE_LINE", "DEG",
-    /* 0x88 */ "RAD", "RANDOMIZE", "NOP", "HALT", NULL, NULL, NULL, NULL,
+    /* 0x80 */ NULL, "TRAP", "TRAP_DISABLE", "END", "STOP", "RESTORE", "RESTORE_LINE", "DEG",
+    /* 0x88 */ "RAD", "RANDOMIZE", "CLR", "POP_GOSUB", "NOP", "HALT", "FUNC_PEEK", NULL,
 };
 
 /* Get opcode name */
@@ -35,6 +36,34 @@ static const char* get_opcode_name(uint8_t opcode) {
     }
     name = opcode_names[opcode];
     return name ? name : "UNKNOWN";
+}
+
+/* Validate opcode table for duplicates and completeness */
+static void validate_opcodes(FILE *out) {
+    int i;
+    int unknown_count = 0;
+    
+    fprintf(out, "; Opcode Validation Report\n");
+    
+    /* Check for duplicate opcodes by scanning bytecode.h definitions */
+    /* For now, just report unknown opcodes in the disassembly */
+    for (i = 0; i < 256; i++) {
+        const char *name = get_opcode_name((uint8_t)i);
+        if (strcmp(name, "UNKNOWN") == 0 && i >= 0x00 && i <= 0x8F) {
+            /* Only report unknown in likely range */
+            if (unknown_count == 0) {
+                fprintf(out, "; Unused opcode slots: ");
+            }
+            fprintf(out, "0x%02X ", i);
+            unknown_count++;
+            if (unknown_count % 16 == 0) fprintf(out, "\n;                       ");
+        }
+    }
+    
+    if (unknown_count > 0) {
+        fprintf(out, "\n; Total unused slots: %d\n", unknown_count);
+    }
+    fprintf(out, ";\n");
 }
 
 /* Check if opcode has operand */
@@ -121,7 +150,12 @@ int main(int argc, char **argv) {
     fprintf(out, "; Constants: %lu\n", (unsigned long)prog->const_count);
     fprintf(out, "; Strings: %lu\n", (unsigned long)prog->string_count);
     fprintf(out, "; Variables: %lu\n", (unsigned long)prog->var_count);
-    fprintf(out, "; Lines: %lu\n\n", (unsigned long)prog->line_count);
+    fprintf(out, "; Lines: %lu\n", (unsigned long)prog->line_count);
+    fprintf(out, ";\n");
+    
+    /* Validate opcode table */
+    validate_opcodes(out);
+    fprintf(out, "\n");
     
     /* Print constant pool */
     if (prog->const_count > 0) {

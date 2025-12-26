@@ -1,4 +1,4 @@
-.DEFAULT_GOAL := help
+.DEFAULT_GOAL := all
 
 CC = gcc
 CFLAGS = -Wall -O2 -ansi -pedantic
@@ -81,7 +81,8 @@ ASM_OBJECTS = $(OBJDIR)/basset_asm.o \
 TOKENIZE_OBJECTS = $(OBJDIR)/basset_tokenize.o \
                    $(OBJDIR)/tokenizer.o \
                    $(OBJDIR)/syntax_tables.o \
-                   $(OBJDIR)/floating_point.o
+                   $(OBJDIR)/floating_point.o \
+                   $(OBJDIR)/parser.o
 
 # Help target
 help:
@@ -90,15 +91,17 @@ help:
 	@echo "╚═════════════════════════════════════════════════════╝"
 	@echo ""
 	@echo "Build Targets:"
-	@echo "  make all           Build all binaries (compiler, VM, disassembler, assembler)"
+	@echo "  make               Build all binaries (compiler, VM, disassembler, assembler)"
+	@echo "  make all           Same as 'make'"
 	@echo "  make clean         Remove all build artifacts and binaries"
 	@echo ""
 	@echo "Test Targets:"
-	@echo "  make test            Run all test suites (standard + error + tokenizer)"
-	@echo "  make check           Alias for 'make test'"
-	@echo "  make test-standard   Run standard test suite (110 tests)"
-	@echo "  make test-errors     Run error test suite (14 tests)"
-	@echo "  make test-tokenizer  Run tokenizer test suite (6 tests)"
+	@echo "  make test              Run all test suites (validation + standard + error + tokenizer)"
+	@echo "  make check             Alias for 'make test'"
+	@echo "  make test-validation   Validate table-driven architecture coverage"
+	@echo "  make test-standard     Run standard test suite (121 tests)"
+	@echo "  make test-errors       Run error test suite (14 tests)"
+	@echo "  make test-tokenizer    Run tokenizer test suite (6 tests)"
 	@echo ""
 	@echo "Individual Binaries:"
 	@echo "  make basset_compile   Build the BASIC compiler"
@@ -108,7 +111,7 @@ help:
 	@echo "  make basset_tokenize  Build the tokenizer debugger"
 	@echo ""
 	@echo "Usage Examples:"
-	@echo "  make all && make test     Build everything and run all tests"
+	@echo "  make && make test         Build everything and run all tests"
 	@echo "  ./basset_compile prog.bas Compile a BASIC program"
 	@echo "  ./basset_vm prog.abc      Run compiled bytecode"
 	@echo ""
@@ -161,7 +164,7 @@ clean:
 	rm -f channel*.txt test_*.txt *.dat
 
 # Test targets
-test: all test-standard test-errors test-tokenizer
+test: all test-validation test-standard test-errors test-tokenizer
 	@echo
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "All test suites completed successfully!"
@@ -171,6 +174,10 @@ test-clean:
 	@rm -f tests/standard/*.abc tests/standard/*.out /tmp/test_*.abc
 	@rm -f tests/tokenizer/*.out
 	@rm -f channel*.txt test_*.txt
+
+test-validation:
+	@echo "Running table validation..."
+	@./tests/validate_tables.sh
 
 test-standard: all test-clean
 	@echo "Running standard test suite..."
@@ -186,4 +193,4 @@ test-tokenizer: all
 
 check: test
 
-.PHONY: all clean test test-clean test-standard test-errors test-tokenizer check help
+.PHONY: all clean test test-clean test-validation test-standard test-errors test-tokenizer check help

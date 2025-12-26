@@ -1,6 +1,6 @@
-# Classic BASIC Test Programs
+# Basset BASIC Test Programs
 
-Here is a set of Classic BASIC test programs compatible with Atari BASIC and Microsoft BASIC, with:
+Here is a set of BASIC test programs compatible with Atari BASIC and Microsoft BASIC, tested with Basset BASIC.
 
 * Suggested Filename
 * Code (ready to type or save)

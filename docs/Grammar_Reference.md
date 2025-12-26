@@ -283,15 +283,30 @@ The system defines 80+ non-terminals representing grammar rules. Major categorie
 
 ## 4. Operator Table
 
-Defines operator precedence for expression parsing.
+Defines operator precedence and parse actions for expression parsing.
 
 ### Structure
 ```c
+typedef enum {
+    PA_NONE = 0,           /* No action */
+    PA_NUMBER_LITERAL,     /* Parse number literal */
+    PA_STRING_LITERAL,     /* Parse string literal */
+    PA_VARIABLE,           /* Parse variable */
+    PA_PARENTHESIZED,      /* Parse parenthesized expression */
+    PA_UNARY_PLUS,         /* Parse unary + */
+    PA_UNARY_MINUS,        /* Parse unary - */
+    PA_UNARY_NOT,          /* Parse unary NOT */
+    PA_FUNCTION_CALL,      /* Parse function call */
+    PA_BINARY_OP           /* Parse binary operator */
+} ParseActionType;
+
 typedef struct {
     unsigned char token;           /* Operator token */
     unsigned char go_on_stack;     /* Precedence when pushing */
     unsigned char come_off_stack;  /* Precedence when popping */
     void (*executor)(void);        /* Execution function (reserved) */
+    ParseActionType nud;           /* Null denotation (prefix/atom) */
+    ParseActionType led;           /* Left denotation (infix) */
 } OperatorEntry;
 ```
 
@@ -311,33 +326,63 @@ typedef struct {
 ### Operator Table Entries
 ```c
 const OperatorEntry operator_table[] = {
-    {TOK_CEXP,    8, 1, NULL},   /* ^ exponentiation */
-    {TOK_CNOT,    7, 7, NULL},   /* NOT */
-    {TOK_CUPLUS,  7, 7, NULL},   /* unary + */
-    {TOK_CUMINUS, 7, 7, NULL},   /* unary - */
-    {TOK_CMUL,    5, 5, NULL},   /* * */
-    {TOK_CDIV,    5, 5, NULL},   /* / */
-    {TOK_CPLUS,   4, 4, NULL},   /* + */
-    {TOK_CMINUS,  4, 4, NULL},   /* - */
-    {TOK_CEQ,     2, 2, NULL},   /* = */
-    {TOK_CLT,     2, 2, NULL},   /* < */
-    {TOK_CGT,     2, 2, NULL},   /* > */
-    {TOK_CLE,     2, 2, NULL},   /* <= */
-    {TOK_CGE,     2, 2, NULL},   /* >= */
-    {TOK_CNE,     2, 2, NULL},   /* <> */
-    {TOK_CAND,    1, 1, NULL},   /* AND */
-    {TOK_COR,     1, 1, NULL},   /* OR */
-    {0, 0, 0, NULL}  /* Sentinel */
+    /* Atoms (nud only) */
+    {TOK_NUMBER,  0, 0, NULL, PA_NUMBER_LITERAL, PA_NONE},
+    {TOK_STRING,  0, 0, NULL, PA_STRING_LITERAL, PA_NONE},
+    {TOK_IDENT,   0, 0, NULL, PA_VARIABLE, PA_NONE},
+    {TOK_CLPRN,   0, 0, NULL, PA_PARENTHESIZED, PA_NONE},
+    
+    /* Binary operators (led only) */
+    {TOK_CEXP,    8, 1, NULL, PA_NONE, PA_BINARY_OP},   /* ^ exponentiation */
+    {TOK_CMUL,    5, 5, NULL, PA_NONE, PA_BINARY_OP},   /* * multiplication */
+    {TOK_CDIV,    5, 5, NULL, PA_NONE, PA_BINARY_OP},   /* / division */
+    {TOK_CEQ,     2, 2, NULL, PA_NONE, PA_BINARY_OP},   /* = equal */
+    {TOK_CLT,     2, 2, NULL, PA_NONE, PA_BINARY_OP},   /* < less than */
+    {TOK_CGT,     2, 2, NULL, PA_NONE, PA_BINARY_OP},   /* > greater than */
+    {TOK_CLE,     2, 2, NULL, PA_NONE, PA_BINARY_OP},   /* <= less or equal */
+    {TOK_CGE,     2, 2, NULL, PA_NONE, PA_BINARY_OP},   /* >= greater or equal */
+    {TOK_CNE,     2, 2, NULL, PA_NONE, PA_BINARY_OP},   /* <> not equal */
+    {TOK_CAND,    1, 1, NULL, PA_NONE, PA_BINARY_OP},   /* AND logical and */
+    {TOK_COR,     1, 1, NULL, PA_NONE, PA_BINARY_OP},   /* OR logical or */
+    
+    /* Dual-role operators (both nud and led) */
+    {TOK_CPLUS,   4, 4, NULL, PA_UNARY_PLUS, PA_BINARY_OP},   /* + addition / unary plus */
+    {TOK_CMINUS,  4, 4, NULL, PA_UNARY_MINUS, PA_BINARY_OP},  /* - subtraction / unary minus */
+    
+    /* Unary operators (nud only) */
+    {TOK_CNOT,    7, 7, NULL, PA_UNARY_NOT, PA_NONE},   /* NOT logical not */
+    
+    /* Functions (nud only) */
+    {TOK_CSIN,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CCOS,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    /* ... 25 more functions ... */
+    
+    {0, 0, 0, NULL, PA_NONE, PA_NONE}  /* Sentinel */
 };
 ```
 
 ### Usage in Expression Parsing
 
-The parser uses **Pratt parsing** (operator precedence) for expressions:
+The parser uses **enum-based Pratt parsing** for expressions:
 
-1. **Prefix**: Handles unary operators (-, +, NOT) and operands
-2. **Infix**: Handles binary operators (+, -, *, /, ^, AND, OR, etc.)
+1. **Null Denotation (nud)**: Handles prefix operators and atoms (literals, variables, parentheses)
+2. **Left Denotation (led)**: Handles infix/postfix operators
 3. **Precedence**: Determines parsing order via `go_on_stack` values
+4. **Dispatch**: Switch statements interpret ParseActionType enums from table
+
+**Example Flow**:
+```c
+// Token: TOK_NUMBER
+op_entry = get_operator_entry(TOK_NUMBER);
+// op_entry->nud == PA_NUMBER_LITERAL
+switch (op_entry->nud) {
+    case PA_NUMBER_LITERAL:
+        left = parse_number_literal(p, NULL);
+        break;
+}
+```
+
+See [Parser.md](Parser.md) for complete details on the enum-based expression parser architecture.
 
 **Algorithm**:
 - Push operators to stack while precedence increases

@@ -1,0 +1,5 @@
+Testing ON GOTO with forward refs
+Branch 1
+Branch 2
+Branch 3
+All ON GOTO forward tests passed

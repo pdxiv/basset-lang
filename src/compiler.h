@@ -47,11 +47,12 @@ typedef struct {
 /* DATA entry types */
 typedef enum {
     DATA_NUMERIC,
-    DATA_STRING
+    DATA_STRING,
+    DATA_NULL       /* Empty/null value - converts based on READ variable type */
 } DataType;
 
 typedef struct {
-    DataType type;               /* NUMERIC or STRING */
+    DataType type;               /* NUMERIC, STRING, or NULL */
     union {
         size_t numeric_idx;      /* Index into data_numeric_pool */
         size_t string_idx;       /* Index into data_string_pool */
@@ -99,8 +100,21 @@ typedef struct {
     
 } CompiledProgram;
 
-/* Compiler state (used during compilation) */
+/* Forward declaration for compilation dispatch */
+struct CompilerState_t;
+typedef struct CompilerState_t CompilerState;
+
+/* Statement compiler function pointer type */
+typedef void (*StatementCompiler)(CompilerState *cs, ParseNode *stmt);
+
+/* Statement compilation dispatch entry */
 typedef struct {
+    unsigned char token;          /* Token type (e.g., TOK_PRINT) */
+    StatementCompiler compiler;   /* Function to compile this statement */
+} CompilationEntry;
+
+/* Compiler state (used during compilation) */
+struct CompilerState_t {
     CompiledProgram *program;
     
     /* Jump fixups (forward references) */
@@ -115,7 +129,7 @@ typedef struct {
     int has_error;
     char error_msg[256];
     
-} CompilerState;
+};
 
 /* Compiler functions */
 CompiledProgram* compiler_compile(ParseNode *root);

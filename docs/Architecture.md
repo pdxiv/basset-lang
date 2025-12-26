@@ -1,8 +1,8 @@
-# BASIC Compiler Implementation Overview
+# Basset BASIC Implementation Overview
 
 ## Introduction
 
-This document provides a comprehensive technical reference for the BASIC compiler and virtual machine implementation. The system draws inspiration from classic table-driven BASIC interpreters, implementing a modern bytecode compiler and virtual machine with compatibility for programs written in Atari BASIC and Microsoft BASIC.
+This document provides a comprehensive technical reference for Basset BASIC. The system draws inspiration from classic table-driven BASIC interpreters, implementing a modern bytecode compiler and virtual machine with compatibility for programs written in Atari BASIC and Microsoft BASIC.
 
 ## System Architecture
 
@@ -24,22 +24,31 @@ The implementation consists of several interconnected subsystems:
 - **Purpose**: Defines BASIC grammar as data tables (not code)
 - **Design**: Based on BML (BASIC Meta-Language) from classic table-driven BASIC design
 - **Components**:
-  - **Keyword Table**: Maps text strings to token IDs
-  - **Statement Table**: Maps statement tokens to syntax rules
+  - **Keyword Table**: Maps text strings to token IDs (70+ keywords)
+  - **Operator Table**: Defines precedence and parse actions (47 entries)
+  - **Function Table**: Function metadata with arity validation (27 functions)
+  - **Statement Table**: Maps statement tokens to syntax rules (56 statements)
   - **Syntax Rule Tables**: Grammar productions encoded as byte sequences
   - **Non-terminals**: 80+ grammar symbols (NT_EXP, NT_STATEMENT, etc.)
   - **Syntax Opcodes**: SYN_OR (alternatives), SYN_RTN (return), etc.
 
-### 3. Table-Driven Parser
+### 3. Data-Driven Parser
 - **Module**: `src/parser.c/h`
-- **Purpose**: Generic parser engine consulting syntax tables
-- **Design Philosophy**: No per-statement parsing code - all grammar in tables
-- **Algorithm**:
+- **Purpose**: Enum-based parser engine with table dispatch
+- **Design Philosophy**: Data-driven architecture with minimal hard-coding
+- **Expression Parsing**:
+  - **Enum-Based Pratt Parser**: Uses ParseActionType enums (PA_NUMBER_LITERAL, PA_BINARY_OP, etc.)
+  - **Switch Dispatch**: Central switch statements interpret enum values from operator table
+  - **Zero Warnings**: Eliminates type mismatch issues from function pointer approach
+  - **Precedence Table**: All operators defined with nud/led action types
+- **Statement Parsing**:
   - Reads syntax rules from tables
   - Matches terminals against token stream
   - Recursively processes non-terminals
   - Builds Abstract Syntax Tree (AST)
-  - Pratt-style expression parsing with precedence
+- **Function Handling**:
+  - Table-driven lookup with automatic arity validation
+  - Descriptive error messages ("SIN expects 1 argument, got 2")
 
 ### 4. Compiler (Code Generation)
 - **Module**: `src/compiler.c/h`
@@ -126,7 +135,7 @@ The architecture supports:
 - I/O statements (OPEN, CLOSE, GET, PUT, NOTE, POINT, XIO, STATUS)
 - Array support (DIM, 1D/2D arrays)
 - String functions (LEFT$, RIGHT$, MID$, STR$, CHR$, ASC, VAL, LEN)
-- Math functions (SIN, COS, ATN, EXP, LOG, CLOG, SQR, ABS, INT, RND, SGN)
+- Math functions (SIN, COS, ATN, EXP, LOG, CLOG, SQR, ABS, INT, RND, SGN, PEEK)
 - Control flow (GOTO, GOSUB, ON...GOTO, ON...GOSUB, TRAP)
 
 ### Microsoft BASIC Extensions
@@ -137,9 +146,13 @@ The architecture supports:
 
 ### Modern Enhancements
 - Bytecode compilation for faster execution
-- Structured error handling
+- Compile-time address resolution for GOTO/GOSUB (no runtime line lookups)
+- Optimized ON...GOTO/GOSUB with direct address tables
+- Forward reference resolution during compilation
+- Structured error handling with improved error messages
 - File-based I/O with multiple channels
 - Separate compilation and execution phases
+- Variable limit enforcement (Atari BASIC compatibility)
 
 ## Performance Characteristics
 
@@ -154,8 +167,8 @@ The architecture supports:
 ```
 Constants Pool:     Fixed at compile time
 String Constants:   Fixed at compile time
-Variables (0-127):  Numeric and string slots
-Arrays:            Dynamic allocation on DIM
+Variables (0-127):  Numeric and string slots (128 each, limit enforced)
+Arrays:            Dynamic allocation on DIM (64 max, limit enforced)
 FOR Stack:         32 entries (loop contexts)
 GOSUB Stack:       64 entries (return addresses)
 Numeric Stack:     Dynamic growth
@@ -219,16 +232,16 @@ All tests organized in `tests/` with self-contained runners.
 - **README.md**: Quick start guide
 - **QUICKSTART.md**: Getting started tutorial
 - **STRUCTURE.md**: Project organization
-- **Implementation_Overview.md**: This document
+- **Architecture.md**: This document
 - **Token_Reference.md**: Complete token catalog
 - **Bytecode_Reference.md**: Complete opcode catalog
-- **Syntax_Tables_Reference.md**: Grammar encoding details
-- **VM_Architecture.md**: Virtual machine internals
+- **Grammar_Reference.md**: Grammar encoding details
+- **Virtual_Machine.md**: Virtual machine internals
 
 ## Next Steps
 
 For detailed technical information, consult:
 1. **Token_Reference.md** - All 100+ tokens with IDs and usage
 2. **Bytecode_Reference.md** - All ~140 opcodes with hex values and semantics
-3. **Syntax_Tables_Reference.md** - Grammar rule encoding and BML opcodes
-4. **VM_Architecture.md** - Virtual machine execution model and data structures
+3. **Grammar_Reference.md** - Grammar rule encoding and BML opcodes
+4. **Virtual_Machine.md** - Virtual machine execution model and data structures

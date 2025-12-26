@@ -1,6 +1,6 @@
 # Project Structure
 
-This document describes the organization of the BASIC implementation.
+This document describes the organization of Basset BASIC.
 
 ## Directory Layout
 
@@ -27,7 +27,7 @@ This document describes the organization of the BASIC implementation.
 ├── tests/                 # Test suite
 │   ├── README.md          # Test documentation
 │   ├── run_all.sh         # Master test runner
-│   ├── standard/          # Standard functional tests (110 tests)
+│   ├── standard/          # Standard functional tests (121 tests)
 │   │   ├── run.sh         # Standard test runner
 │   │   ├── *.bas          # Test programs
 │   │   ├── *.bas.expected # Expected outputs
@@ -42,11 +42,11 @@ This document describes the organization of the BASIC implementation.
 │       └── test_*.bas     # Tokenizer tests
 │
 ├── docs/                  # Reference documentation
-│   ├── Implementation_Overview.md
+│   ├── Architecture.md
 │   ├── Token_Reference.md
 │   ├── Bytecode_Reference.md
-│   ├── Syntax_Tables_Reference.md
-│   ├── VM_Architecture.md
+│   ├── Grammar_Reference.md
+│   ├── Virtual_Machine.md
 │   └── README.md
 │
 ├── obj/                   # Build artifacts (generated)
@@ -74,8 +74,9 @@ Reusable modules that executables link against:
 
 ### Tests Self-Contained
 Each test suite is in its own directory with its runner:
-- `tests/standard/` - Functional tests (110 tests) with run.sh
-- `tests/errors/` - Error detection (14 tests) with run.sh
+- `tests/validate_tables.sh` - Table coverage validation
+- `tests/standard/` - Functional tests (124 tests) with run.sh
+- `tests/errors/` - Error detection (15 tests) with run.sh
 - `tests/tokenizer/` - Tokenizer tests (6 tests) with run.sh
 - `tests/run_all.sh` - Master runner for all suites
 
@@ -123,7 +124,7 @@ Execution Pipeline:
 **New executable:**
 - Place `.c` file at root
 - Add build rule in Makefile (see existing patterns)
-- Add to `make all` target
+- Add to `all` target in Makefile
 
 **New library module:**
 - Place `.c` and `.h` in `src/`
@@ -154,7 +155,7 @@ make test                    # All tests
 **Why separate test directories?**
 - Different test types have different purposes
 - Easier to run subsets (e.g., only tokenizer tests)
-- Clear organization as test count grows (130 tests currently)
+- Clear organization as test count grows (136 tests currently)
 
 **Why docs/ directory?**
 - Separates reference materials from project documentation

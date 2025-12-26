@@ -1,0 +1,5 @@
+ERROR at line 20: SIN expects 1 argument, got 2
+  20 X = SIN(1, 2)
+                  ^
+
+Compilation failed with 1 error(s)

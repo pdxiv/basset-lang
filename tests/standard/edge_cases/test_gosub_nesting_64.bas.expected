@@ -1,0 +1,3 @@
+Testing deep GOSUB nesting (64 levels)
+Reached 64-level depth
+Returned from 64 levels: PASSED

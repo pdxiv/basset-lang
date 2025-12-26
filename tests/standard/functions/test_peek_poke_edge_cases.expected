@@ -1,0 +1,24 @@
+PEEK/POKE Edge Cases and Examples
+
+Test 1: Using memory as simple data storage
+  PASS: Stored and retrieved sequence
+
+Test 2: Memory as lookup table
+  PASS: Lookup table works
+
+Test 3: Verify low byte extraction
+  PASS: Low byte extraction correct
+
+Test 4: Common memory regions
+  PASS: Various memory regions
+
+Test 5: Floating point addresses
+  PASS: Float addresses converted
+
+Test 6: Negative value handling
+  PASS: Negative values handled
+
+Test 7: Simulating 16-bit storage
+  PASS: Multi-byte storage simulation
+
+All edge case tests PASSED!

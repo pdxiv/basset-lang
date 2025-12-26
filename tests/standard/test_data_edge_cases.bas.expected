@@ -1,0 +1,20 @@
+Names with commas:
+Smith, John
+Doe, Jane
+
+Strings with spaces:
+[  spaced  ]
+[normal]
+
+Values after DATA with REM:
+ 100 200 300
+
+String with colon:
+Time: 10:30
+Regular
+
+Multiple DATA statements:
+ 1 2 3 4 5 6
+
+Mixed numeric and string:
+ 99 text 3.14

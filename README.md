@@ -1,17 +1,25 @@
-# Classic BASIC Compiler
+# Basset BASIC
 
 A table-driven BASIC compiler and virtual machine implemented in K&R C for Linux.
 
 ## Overview
 
-This is a from-scratch implementation of a BASIC language compiler that aims for source compatibility with classic 8-bit BASIC implementations, including Atari BASIC and Microsoft BASIC. The implementation follows a **table-driven syntax** approach inspired by classic BASIC interpreters, where the grammar and syntax rules are encoded in data tables rather than hard-coded in parser logic.
+Basset BASIC is a from-scratch implementation of a BASIC language compiler that aims for source compatibility with classic 8-bit BASIC implementations, including Atari BASIC and Microsoft BASIC. The implementation uses a **data-driven architecture** where grammar rules, operator precedence, and function metadata are encoded in data tables rather than hard-coded in parser logic.
+
+### Key Features
+
+- **Enum-Based Pratt Parser**: Expression parsing uses data-driven enum dispatch with zero compiler warnings
+- **Function Metadata Table**: All 27 built-in functions with automatic arity validation
+- **Table-Driven Grammar**: Statement syntax rules encoded as BML (BASIC Meta-Language) bytecode
+- **Bytecode VM**: Fast bytecode interpreter with full BASIC feature support
+- **Comprehensive Tests**: 145 tests covering table validation, functionality, error handling, and tokenization
 
 ## Quick Start
 
 Build everything:
 
 ```bash
-make all
+make
 ```
 
 Run a BASIC program:
@@ -31,13 +39,13 @@ make test
 Build all tools:
 
 ```bash
-make all
+make
 ```
 
 This produces:
 
-- `basset_compile` - The BASIC compiler (source → bytecode)
-- `basset_vm` - The bytecode virtual machine
+- `basset_compile` - Basset BASIC compiler (source → bytecode)
+- `basset_vm` - Basset BASIC virtual machine
 - `basset_disasm` - Bytecode disassembler
 - `basset_asm` - Bytecode assembler
 - `basset_tokenize` - Tokenizer debugging tool
@@ -135,14 +143,14 @@ Assemble bytecode from assembly format:
 
 ## Testing
 
-Comprehensive test suite with 130 tests:
+Comprehensive test suite with 136 tests:
 
 ```bash
 make test                    # Run all test suites
 ./tests/run_all.sh          # Alternative (same result)
 
 # Individual test suites:
-./tests/standard/run.sh     # 110 functional tests
+./tests/standard/run.sh     # 116 functional tests
 ./tests/errors/run.sh       # 14 error detection tests
 ./tests/tokenizer/run.sh    # 6 tokenizer tests
 ```
@@ -157,7 +165,7 @@ See [tests/README.md](tests/README.md) for detailed test documentation.
 
 ### Test Coverage
 
-**Standard Test Suite** (110 tests)
+**Standard Test Suite** (116 tests)
 
 - Statements, expressions, control flow, I/O, functions
 - Includes TAB function tests
@@ -175,13 +183,13 @@ See [tests/README.md](tests/README.md) for detailed test documentation.
 **Run all tests:**
 
 ```bash
-make test                # All test suites (130 tests total)
-make test-standard       # Just standard tests (110 tests)
+make test                # All test suites (143 tests total)
+make test-standard       # Just standard tests (123 tests)
 make test-errors         # Just error tests (14 tests)
 make test-tokenizer      # Just tokenizer tests (6 tests)
 ```
 
-**Current status**: ✅ 130/130 tests passing (100%)
+**Current status**: ✅ 143/143 tests passing (100%)
 
 ## Usage
 
@@ -214,7 +222,9 @@ Example:
 
 ## Architecture
 
-The interpreter consists of several key components:
+This implementation uses a **table-driven architecture** throughout, where behavior is defined by data tables rather than hard-coded logic. Both the parser (~90% table-driven) and compiler (100% table-driven) use dispatch tables to handle different language constructs.
+
+The system consists of several key components:
 
 ### 1. Tokenizer (`tokenizer.c`)
 
@@ -248,31 +258,50 @@ The syntax table uses opcodes inspired by table-driven BASIC interpreters:
 
 ### 3. Parser (`parser.c`)
 
-A table-driven parser engine that:
+A table-driven parser engine (~90% table-driven) that:
 
 - Consults syntax tables to validate statement structure
 - Uses operator precedence for expression parsing (Pratt-style)
-- Builds a parse tree (AST) representation
+- Builds a parse tree (AST) representation  
 - Handles non-terminals by dispatching to appropriate syntax rules
+- Uses grammar rules with proper non-terminals (NT_REM_BODY, NT_DATA_LIST, etc.)
+
+**Special cases** (1 of 50+ statements):
+- PRINT: Complex alternating expression/separator syntax with trailing separator detection
+
+**Recent improvements**: REM and DATA now use proper grammar rules instead of hard-coded parsing logic, making the parser more consistent and maintainable.
 
 **Key principle**: The parser is generic. To add support for a new statement type, you primarily edit the syntax tables, not the parser code itself.
 
-### 4. Runtime (`runtime.c`)
+### 4. Compiler (`compiler.c`)
+
+Table-driven bytecode compiler (100% table-driven dispatch) that:
+
+- Uses a compilation dispatch table to map statement tokens to compiler functions
+- Each statement type has a focused, dedicated compiler function
+- Generates optimized bytecode for the virtual machine
+- Handles forward references for GOTO/GOSUB target resolution
+- Manages constant pools, variable symbol tables, and DATA statements
+
+**Recent improvements**: Replaced a 405-line switch statement with a clean dispatch table, making it trivial to add new statements (just add one function + one table entry).
+
+**Key principle**: Adding a new statement requires writing one compiler function and adding one entry to the compilation_table. No modification to core compilation logic needed.
+
+### 5. Virtual Machine (`vm.c`)
+
+Stack-based bytecode interpreter that executes:
+
+- Arithmetic and logical operations
+- Variable access and assignment
+- Control flow (jumps, loops, subroutines)
+- Built-in functions (SIN, COS, INT, etc.)
+- I/O operations
 
 Manages:
 
-- Variable storage (numeric and string variables)
-- FOR/NEXT loop stack
+- Variable storage (numeric and string variables, arrays)\n- FOR/NEXT loop stack  
 - GOSUB/RETURN call stack
-
-### 5. Executor (`executor.c`)
-
-Walks the parse tree and executes:
-
-- Arithmetic and logical expressions
-- Variable assignments
-- Built-in statements (PRINT, END, etc.)
-- Built-in functions (SIN, COS, INT, etc.)
+- DATA statement read pointer
 
 ### 6. Floating Point (`floating_point.c`)
 
@@ -354,13 +383,17 @@ Provides numeric operations. Uses standard C `double` type for simplicity and po
 
 1. **Graphics/Sound**: Statements parse but don't produce visual/audio output (GRAPHICS, PLOT, POSITION, DRAWTO, SETCOLOR, SOUND)
 
-2. **DATA/READ/RESTORE**: These statements parse but don't store or retrieve data yet
+2. **Floating-point format**: Uses C doubles. Numeric results may differ slightly from original 8-bit BASIC implementations
 
-3. **Floating-point format**: Uses C doubles. Numeric results may differ slightly from original 8-bit BASIC implementations
+3. **Error messages**: Error reporting is simplified compared to full TRAP handling in classic BASIC
 
-4. **Error messages**: Error reporting is simplified compared to full TRAP handling in classic BASIC
+4. **Platform-specific functions**: Functions like PADDLE, STICK, PTRIG, STRIG return dummy values
 
-5. **Platform-specific functions**: Functions like PADDLE, STICK, PTRIG, STRIG return dummy values
+5. **Null DATA items**: Empty values in DATA statements (e.g., `DATA 1,,3`) are not currently supported
+
+6. **DATA identifiers**: Unquoted identifiers in DATA statements (e.g., `DATA ABC, XYZ`) are converted to numeric 0, not stored as strings
+
+7. **READ type conversion**: Reading numeric DATA into string variables converts to string (per Microsoft BASIC spec). Reading string DATA into numeric variables produces TYPE MISMATCH error
 
 ## Syntax Table Mapping
 
@@ -465,10 +498,23 @@ Potential enhancements:
 
 ## Documentation
 
-See the `docs/` directory for comprehensive documentation including:
+Comprehensive documentation is available in the `docs/` directory:
 
-- Complete token reference (100+ tokens)
-- Bytecode reference (~140 opcodes)
+### Architecture & Design
+- **[docs/Architecture.md](docs/Architecture.md)** - System architecture, components, and compilation pipeline
+- **[docs/Parser.md](docs/Parser.md)** - Enum-based expression parser design and implementation
+- **[docs/Grammar_Reference.md](docs/Grammar_Reference.md)** - Grammar encoding, BML meta-language, and extensibility
+
+### Reference Documentation  
+- **[docs/Token_Reference.md](docs/Token_Reference.md)** - Complete catalog of 100+ tokens with hex values and descriptions
+- **[docs/Bytecode_Reference.md](docs/Bytecode_Reference.md)** - All ~140 VM opcodes with stack effects and examples
+- **[docs/Virtual_Machine.md](docs/Virtual_Machine.md)** - Virtual machine internals, memory model, and execution
+
+### Developer Guides
+- **[docs/Extending_Guide.md](docs/Extending_Guide.md)** - Step-by-step guide for extending the language
+- **[tests/README.md](tests/README.md)** - Test suite organization and running tests
+
+See **[docs/README.md](docs/README.md)** for the complete documentation index.
 - Syntax tables reference (BML grammar encoding)
 - VM architecture details
 - Implementation overview

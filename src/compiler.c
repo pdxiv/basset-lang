@@ -7,6 +7,11 @@
 #include <stdio.h>
 #include <math.h>
 
+/* Maximum variables (Atari BASIC compatibility) */
+#define MAX_NUMERIC_VARS 128
+#define MAX_STRING_VARS 128
+#define MAX_ARRAYS 64
+
 /* K&R C compatible strdup */
 static char* my_strdup(const char *s) {
     char *d;
@@ -119,10 +124,45 @@ int compiler_find_variable(CompilerState *cs, const char *name) {
 int compiler_add_variable(CompilerState *cs, const char *name, VarType type) {
     int existing;
     VariableInfo *var;
+    int is_string = (type == VAR_STRING);
+    int is_array = (type == VAR_ARRAY_1D || type == VAR_ARRAY_2D);
+    int num_count = 0;
+    int str_count = 0;
+    int array_count = 0;
+    size_t i;
     
     /* Check if already exists */
     existing = compiler_find_variable(cs, name);
     if (existing >= 0) return existing;
+    
+    /* Count existing variables by type to enforce limits */
+    for (i = 0; i < cs->program->var_count; i++) {
+        VarType vtype = cs->program->var_table[i].type;
+        if (vtype == VAR_STRING) {
+            str_count++;
+        } else if (vtype == VAR_ARRAY_1D || vtype == VAR_ARRAY_2D) {
+            array_count++;
+        } else {
+            num_count++;
+        }
+    }
+    
+    /* Check limits */
+    if (is_string && str_count >= MAX_STRING_VARS) {
+        fprintf(stderr, "Error: Too many string variables (maximum %d)\n", MAX_STRING_VARS);
+        fprintf(stderr, "  Variable '%s' cannot be allocated.\n", name);
+        return -1;
+    }
+    if (is_array && array_count >= MAX_ARRAYS) {
+        fprintf(stderr, "Error: Too many arrays (maximum %d)\n", MAX_ARRAYS);
+        fprintf(stderr, "  Array '%s' cannot be allocated.\n", name);
+        return -1;
+    }
+    if (!is_string && !is_array && num_count >= MAX_NUMERIC_VARS) {
+        fprintf(stderr, "Error: Too many numeric variables (maximum %d)\n", MAX_NUMERIC_VARS);
+        fprintf(stderr, "  Variable '%s' cannot be allocated.\n", name);
+        return -1;
+    }
     
     /* Expand if needed */
     if (cs->program->var_count >= cs->program->var_capacity) {
@@ -473,6 +513,7 @@ static void compile_expression(CompilerState *cs, ParseNode *expr) {
                 case TOK_CINT: compiler_emit_no_operand(cs, OP_FUNC_INT); break;
                 case TOK_CRND: compiler_emit_no_operand(cs, OP_FUNC_RND); break;
                 case TOK_CSGN: compiler_emit_no_operand(cs, OP_FUNC_SGN); break;
+                case TOK_CPEEK: compiler_emit_no_operand(cs, OP_FUNC_PEEK); break;
                 
                 /* String functions */
                 case TOK_CLEFT: compiler_emit_no_operand(cs, OP_STR_LEFT); break;
@@ -1230,21 +1271,101 @@ static void compile_dim(CompilerState *cs, ParseNode *stmt) {
 }
 
 /* Compile DATA statement - collect into data pool */
+/* Forward declaration for recursive helper */
+static void extract_data_values_recursive(CompilerState *cs, ParseNode *node);
+
 static void compile_data(CompilerState *cs, ParseNode *stmt) {
-    size_t i;
+    ParseNode *data_list;
     
-    for (i = 0; i < stmt->child_count; i++) {
-        ParseNode *item = stmt->children[i];
-        DataEntry entry;
+    /* With table-driven DATA parsing, structure is:
+     * stmt -> children[0] = DATA_LIST
+     *         children[1] = EOS
+     * DATA_LIST contains DATA_VAL and DATA_TAIL nodes
+     * DATA_TAIL recursively contains [comma, DATA_VAL, DATA_TAIL, ...]
+     */
+    
+    if (stmt->child_count == 0) return;
+    
+    /* Get the DATA_LIST node */
+    data_list = stmt->children[0];
+    
+    /* Recursively extract all DATA values */
+    extract_data_values_recursive(cs, data_list);
+    
+    /* DATA statements don't generate runtime code */
+}
+
+/* Helper function to recursively extract DATA values from parse tree */
+static void extract_data_values_recursive(CompilerState *cs, ParseNode *node) {
+    size_t i;
+    DataEntry entry;
+    
+    if (!node) return;
+    
+    /* Debug: print node info */
+    /*
+    fprintf(stderr, "extract_data: node type=%d, token=%d, child_count=%d, text=%s, value=%g\n",
+            node->type, node->token, (int)node->child_count,
+            node->text ? node->text : "(null)", node->value);
+    */
+    
+    /* Check for null DATA value pattern: DATA_TAIL with 2 children (comma + tail) */
+    /* This represents "DATA_TAIL = , DATA_TAIL" alternative (null value) */
+    if (node->type == NODE_EXPRESSION && node->child_count == 2 &&
+        node->children[0]->type == NODE_OPERATOR && node->children[0]->token == TOK_CCOM &&
+        node->children[1]->type == NODE_EXPRESSION) {
+        /* This is a null DATA value (e.g., the middle value in "DATA 1,,3") */
+        /*
+        fprintf(stderr, "  --> Detected NULL data item\n");
+        */
+        entry.type = DATA_NULL;
+        entry.value.numeric_idx = 0;  /* Not used for NULL type */
         
-        if (item->type == NODE_CONSTANT && item->token == TOK_STRING) {
+        if (cs->program->data_count >= cs->program->data_capacity) {
+            cs->program->data_capacity *= 2;
+            cs->program->data_entries = realloc(cs->program->data_entries,
+                sizeof(DataEntry) * cs->program->data_capacity);
+        }
+        cs->program->data_entries[cs->program->data_count++] = entry;
+        /*
+        fprintf(stderr, "  --> Added NULL data entry, data_count now=%d\n",
+                (int)cs->program->data_count);
+        */
+        
+        /* Continue processing the tail */
+        extract_data_values_recursive(cs, node->children[1]);
+        return;
+    }
+    
+    /* Check for empty/null DATA value (epsilon production) - no longer used */
+    /* The new grammar handles nulls via DATA_TAIL = , DATA_TAIL pattern above */
+    /* Keep this check for safety but it should never match now */
+    if (node->child_count == 0 && node->text == NULL && node->type == NODE_EXPRESSION) {
+        /* Epsilon terminator - don't add as data */
+        return;
+    }
+    
+    /* If this is a constant or identifier, add it to the data pool */
+    if (node->type == NODE_CONSTANT || node->type == NODE_VARIABLE) {
+        if (node->token == TOK_STRING) {
             /* String data */
             if (cs->program->data_string_count >= cs->program->data_string_capacity) {
                 cs->program->data_string_capacity *= 2;
                 cs->program->data_string_pool = realloc(cs->program->data_string_pool,
                     sizeof(char*) * cs->program->data_string_capacity);
             }
-            cs->program->data_string_pool[cs->program->data_string_count] = my_strdup(item->text);
+            cs->program->data_string_pool[cs->program->data_string_count] = my_strdup(node->text);
+            
+            entry.type = DATA_STRING;
+            entry.value.string_idx = cs->program->data_string_count++;
+        } else if (node->token == TOK_IDENT && node->text) {
+            /* Identifier in DATA - store as string (per Microsoft BASIC spec) */
+            if (cs->program->data_string_count >= cs->program->data_string_capacity) {
+                cs->program->data_string_capacity *= 2;
+                cs->program->data_string_pool = realloc(cs->program->data_string_pool,
+                    sizeof(char*) * cs->program->data_string_capacity);
+            }
+            cs->program->data_string_pool[cs->program->data_string_count] = my_strdup(node->text);
             
             entry.type = DATA_STRING;
             entry.value.string_idx = cs->program->data_string_count++;
@@ -1255,7 +1376,12 @@ static void compile_data(CompilerState *cs, ParseNode *stmt) {
                 cs->program->data_numeric_pool = realloc(cs->program->data_numeric_pool,
                     sizeof(double) * cs->program->data_numeric_capacity);
             }
-            cs->program->data_numeric_pool[cs->program->data_numeric_count] = item->value;
+            
+            if (node->token == TOK_NUMBER) {
+                cs->program->data_numeric_pool[cs->program->data_numeric_count] = node->value;
+            } else {
+                cs->program->data_numeric_pool[cs->program->data_numeric_count] = 0;
+            }
             
             entry.type = DATA_NUMERIC;
             entry.value.numeric_idx = cs->program->data_numeric_count++;
@@ -1268,441 +1394,464 @@ static void compile_data(CompilerState *cs, ParseNode *stmt) {
                 sizeof(DataEntry) * cs->program->data_capacity);
         }
         cs->program->data_entries[cs->program->data_count++] = entry;
+        /*
+        fprintf(stderr, "  --> Added data entry: type=%d, idx=%d, data_count now=%d\n",
+                entry.type, entry.value.numeric_idx, (int)cs->program->data_count);
+        */
+        return;
     }
     
-    /* DATA statements don't generate runtime code */
+    /* Otherwise, recursively process all children */
+    for (i = 0; i < node->child_count; i++) {
+        extract_data_values_recursive(cs, node->children[i]);
+    }
 }
 
 /* Compile READ statement */
+/* Forward declaration for recursive helper */
+static void compile_read_recursive(CompilerState *cs, ParseNode *node);
+
 static void compile_read(CompilerState *cs, ParseNode *stmt) {
+    ParseNode *nsvrl;
+    
+    /* READ statement structure:
+     * stmt -> children[0] = NSVRL (variable list)
+     *         children[1] = EOS
+     * NSVRL is recursive like DATA_TAIL
+     */
+    
+    if (stmt->child_count == 0) return;
+    
+    /* Get the NSVRL node (variable list) */
+    nsvrl = stmt->children[0];
+    
+    /* Recursively process all variables */
+    compile_read_recursive(cs, nsvrl);
+}
+
+/* Helper to recursively compile READ variables from parse tree */
+static void compile_read_recursive(CompilerState *cs, ParseNode *node) {
     size_t i;
     
-    for (i = 0; i < stmt->child_count; i++) {
-        ParseNode *var_node = stmt->children[i];
+    if (!node) return;
+    
+    /* If this is a variable node, emit READ instruction */
+    if ((node->type == NODE_VARIABLE || node->type == NODE_EXPRESSION) && node->text != NULL) {
+        int slot;
+        const char *var_name = node->text;
+        
+        slot = compiler_find_variable(cs, var_name);
+        if (slot < 0) {
+            slot = compiler_add_variable(cs, var_name, get_var_type(var_name));
+        }
+        
+        if (strchr(var_name, '$')) {
+            compiler_emit(cs, OP_DATA_READ_STR, slot);
+        } else {
+            compiler_emit(cs, OP_DATA_READ_NUM, slot);
+        }
+        return;
+    }
+    
+    /* Otherwise, recursively process all children */
+    for (i = 0; i < node->child_count; i++) {
+        compile_read_recursive(cs, node->children[i]);
+    }
+}
+
+/* Simple statement compilers (emit single opcode) */
+static void compile_end_stmt(CompilerState *cs, ParseNode *stmt) {
+    (void)stmt;
+    compiler_emit_no_operand(cs, OP_END);
+}
+
+static void compile_stop_stmt(CompilerState *cs, ParseNode *stmt) {
+    (void)stmt;
+    compiler_emit_no_operand(cs, OP_STOP);
+}
+
+static void compile_return_stmt(CompilerState *cs, ParseNode *stmt) {
+    (void)stmt;
+    compiler_emit_no_operand(cs, OP_RETURN);
+}
+
+static void compile_clr_stmt(CompilerState *cs, ParseNode *stmt) {
+    (void)stmt;
+    compiler_emit_no_operand(cs, OP_CLR);
+}
+
+static void compile_pop_stmt(CompilerState *cs, ParseNode *stmt) {
+    (void)stmt;
+    compiler_emit_no_operand(cs, OP_POP_GOSUB);
+}
+
+static void compile_deg_stmt(CompilerState *cs, ParseNode *stmt) {
+    (void)stmt;
+    compiler_emit_no_operand(cs, OP_DEG);
+}
+
+static void compile_rad_stmt(CompilerState *cs, ParseNode *stmt) {
+    (void)stmt;
+    compiler_emit_no_operand(cs, OP_RAD);
+}
+
+static void compile_noop(CompilerState *cs, ParseNode *stmt) {
+    /* No-op for statements like CLEAR, CLS, DEFxxx that we don't implement */
+    (void)cs;
+    (void)stmt;
+}
+
+/* Complex statement compilers */
+static void compile_let_stmt(CompilerState *cs, ParseNode *stmt) {
+    /* Assignment: children are [var_expr, eq_op, value_expr, eos] */
+    if (stmt->child_count >= 3) {
+        ParseNode *var_expr = stmt->children[0];
+        ParseNode *value_expr = stmt->children[2];  /* Skip the '=' operator at child[1] */
+        ParseNode *actual_var;
         int slot;
         
+        /* Check if this is an array assignment (has subscripts) */
+        if (var_expr->type == NODE_EXPRESSION && var_expr->child_count == 2) {
+            ParseNode *var_part = var_expr->children[0];
+            ParseNode *subscript_expr = var_expr->children[1];
+            ParseNode *subscript1 = NULL;
+            ParseNode *subscript2 = NULL;
+            
+            /* Unwrap variable */
+            while (var_part && var_part->type == NODE_EXPRESSION && var_part->child_count > 0) {
+                var_part = var_part->children[0];
+            }
+            
+            /* Extract subscripts */
+            if (subscript_expr && subscript_expr->child_count >= 2) {
+                subscript1 = subscript_expr->children[1];
+                /* For 2D arrays: child[2] is EXPRESSION containing [comma, sub2] */
+                if (subscript_expr->child_count >= 4) {
+                    ParseNode *middle = subscript_expr->children[2];
+                    if (middle && middle->type == NODE_EXPRESSION && middle->child_count >= 2) {
+                        subscript2 = middle->children[1];
+                    }
+                }
+            }
+            
+            if (var_part && var_part->type == NODE_VARIABLE && var_part->text && subscript1) {
+                /* Array assignment */
+                int is_string = strchr(var_part->text, '$') != NULL;
+                
+                slot = compiler_find_variable(cs, var_part->text);
+                if (slot < 0) {
+                    slot = compiler_add_variable(cs, var_part->text, get_var_type(var_part->text));
+                }
+                
+                /* Compile subscripts and value */
+                compile_expression(cs, subscript1);
+                if (subscript2) {
+                    compile_expression(cs, subscript2);
+                }
+                compile_expression(cs, value_expr);
+                
+                /* Emit array store */
+                if (subscript2) {
+                    compiler_emit(cs, is_string ? OP_STR_ARRAY_SET_2D : OP_ARRAY_SET_2D, slot);
+                } else {
+                    compiler_emit(cs, is_string ? OP_STR_ARRAY_SET_1D : OP_ARRAY_SET_1D, slot);
+                }
+                return;
+            }
+        }
+        
+        /* Simple variable assignment */
+        actual_var = var_expr;
+        while (actual_var && actual_var->type == NODE_EXPRESSION && actual_var->child_count > 0) {
+            actual_var = actual_var->children[0];
+        }
+        
+        if (!actual_var || actual_var->type != NODE_VARIABLE || !actual_var->text) {
+            return;
+        }
+        
+        slot = compiler_find_variable(cs, actual_var->text);
+        if (slot < 0) {
+            slot = compiler_add_variable(cs, actual_var->text, get_var_type(actual_var->text));
+        }
+        
+        compile_expression(cs, value_expr);
+        
+        if (get_var_type(actual_var->text) == VAR_STRING) {
+            compiler_emit(cs, OP_STR_POP_VAR, slot);
+        } else {
+            compiler_emit(cs, OP_POP_VAR, slot);
+        }
+    }
+}
+
+static void compile_randomize_stmt(CompilerState *cs, ParseNode *stmt) {
+    if (stmt->child_count == 0 ||
+        (stmt->children[0]->type == NODE_EXPRESSION &&
+         stmt->children[0]->child_count == 1 &&
+         (stmt->children[0]->children[0]->token == TOK_CCR ||
+          stmt->children[0]->children[0]->token == TOK_CEOS))) {
+        fprintf(stderr, "Error: RANDOMIZE requires an argument\n");
+        return;
+    }
+    
+    compile_expression(cs, stmt->children[0]);
+    compiler_emit_no_operand(cs, OP_RANDOMIZE);
+}
+
+static void compile_trap_stmt(CompilerState *cs, ParseNode *stmt) {
+    if (stmt->child_count >= 1) {
+        ParseNode *target = stmt->children[0];
+        if (target->type == NODE_CONSTANT) {
+            uint16_t line = (uint16_t)target->value;
+            int32_t offset = compiler_find_line_offset(cs, line);
+            if (offset >= 0) {
+                compiler_emit(cs, OP_TRAP, offset);
+            } else {
+                compiler_emit(cs, OP_TRAP, 0xFFFF);
+                compiler_add_jump_fixup(cs, cs->program->code_len - 1, line, JUMP_ABSOLUTE);
+            }
+        }
+    }
+}
+
+static void compile_restore_stmt(CompilerState *cs, ParseNode *stmt) {
+    if (stmt->child_count > 0) {
+        compile_expression(cs, stmt->children[0]);
+        compiler_emit_no_operand(cs, OP_RESTORE_LINE);
+    } else {
+        compiler_emit(cs, OP_RESTORE, 0);
+    }
+}
+
+/* I/O statement compilers */
+static void compile_open_stmt(CompilerState *cs, ParseNode *stmt) {
+    if (stmt->child_count >= 7) {
+        compile_expression(cs, stmt->children[1]); /* channel */
+        compile_expression(cs, stmt->children[3]); /* mode */
+        compile_expression(cs, stmt->children[5]); /* aux */
+        compile_expression(cs, stmt->children[7]); /* filename */
+        compiler_emit_no_operand(cs, OP_OPEN);
+    }
+}
+
+static void compile_close_stmt(CompilerState *cs, ParseNode *stmt) {
+    if (stmt->child_count >= 2) {
+        compile_expression(cs, stmt->children[1]);
+        compiler_emit_no_operand(cs, OP_CLOSE);
+    } else {
+        compiler_emit(cs, OP_PUSH_CONST, 0);
+        compiler_emit_no_operand(cs, OP_CLOSE);
+    }
+}
+
+static void compile_put_stmt(CompilerState *cs, ParseNode *stmt) {
+    if (stmt->child_count >= 3) {
+        compile_expression(cs, stmt->children[1]); /* channel */
+        compile_expression(cs, stmt->children[3]); /* value */
+        compiler_emit_no_operand(cs, OP_PUT);
+    }
+}
+
+static void compile_get_stmt(CompilerState *cs, ParseNode *stmt) {
+    if (stmt->child_count >= 3) {
+        ParseNode *var = stmt->children[3];
+        ParseNode *var_node;
+        int slot;
+        
+        compile_expression(cs, stmt->children[1]);
+        compiler_emit_no_operand(cs, OP_GET);
+        
+        var_node = var;
         while (var_node && var_node->type == NODE_EXPRESSION && var_node->child_count > 0) {
             var_node = var_node->children[0];
         }
         
-        if (!var_node || !var_node->text) continue;
+        if (!var_node || !var_node->text) return;
         
         slot = compiler_find_variable(cs, var_node->text);
         if (slot < 0) {
             slot = compiler_add_variable(cs, var_node->text, get_var_type(var_node->text));
         }
-        
-        if (strchr(var_node->text, '$')) {
-            compiler_emit(cs, OP_DATA_READ_STR, slot);
-        } else {
-            compiler_emit(cs, OP_DATA_READ_NUM, slot);
-        }
+        compiler_emit(cs, OP_POP_VAR, slot);
     }
 }
 
-/* Compile statement */
+static void compile_note_stmt(CompilerState *cs, ParseNode *stmt) {
+    if (stmt->child_count >= 5) {
+        ParseNode *sec_var = stmt->children[3];
+        ParseNode *byte_var = stmt->children[5];
+        ParseNode *sec_node, *byte_node;
+        int sec_slot, byte_slot;
+        
+        compile_expression(cs, stmt->children[1]);
+        compiler_emit_no_operand(cs, OP_NOTE);
+        
+        sec_node = sec_var;
+        while (sec_node && sec_node->type == NODE_EXPRESSION && sec_node->child_count > 0) {
+            sec_node = sec_node->children[0];
+        }
+        byte_node = byte_var;
+        while (byte_node && byte_node->type == NODE_EXPRESSION && byte_node->child_count > 0) {
+            byte_node = byte_node->children[0];
+        }
+        
+        if (!sec_node || !sec_node->text || !byte_node || !byte_node->text) return;
+        
+        sec_slot = compiler_find_variable(cs, sec_node->text);
+        if (sec_slot < 0) {
+            sec_slot = compiler_add_variable(cs, sec_node->text, get_var_type(sec_node->text));
+        }
+        byte_slot = compiler_find_variable(cs, byte_node->text);
+        if (byte_slot < 0) {
+            byte_slot = compiler_add_variable(cs, byte_node->text, get_var_type(byte_node->text));
+        }
+        
+        compiler_emit(cs, OP_POP_VAR, byte_slot);
+        compiler_emit(cs, OP_POP_VAR, sec_slot);
+    }
+}
+
+static void compile_point_stmt(CompilerState *cs, ParseNode *stmt) {
+    if (stmt->child_count >= 5) {
+        compile_expression(cs, stmt->children[1]); /* channel */
+        compile_expression(cs, stmt->children[3]); /* sector */
+        compile_expression(cs, stmt->children[5]); /* byte */
+        compiler_emit_no_operand(cs, OP_POINT);
+    }
+}
+
+static void compile_status_stmt(CompilerState *cs, ParseNode *stmt) {
+    if (stmt->child_count >= 3) {
+        ParseNode *var = stmt->children[3];
+        ParseNode *var_node;
+        int slot;
+        
+        compile_expression(cs, stmt->children[1]);
+        compiler_emit_no_operand(cs, OP_STATUS);
+        
+        var_node = var;
+        while (var_node && var_node->type == NODE_EXPRESSION && var_node->child_count > 0) {
+            var_node = var_node->children[0];
+        }
+        
+        if (!var_node || !var_node->text) return;
+        
+        slot = compiler_find_variable(cs, var_node->text);
+        if (slot < 0) {
+            slot = compiler_add_variable(cs, var_node->text, get_var_type(var_node->text));
+        }
+        compiler_emit(cs, OP_POP_VAR, slot);
+    }
+}
+
+static void compile_xio_stmt(CompilerState *cs, ParseNode *stmt) {
+    if (stmt->child_count >= 10) {
+        compile_expression(cs, stmt->children[0]); /* command */
+        compile_expression(cs, stmt->children[3]); /* channel */
+        compile_expression(cs, stmt->children[5]); /* aux1 */
+        compile_expression(cs, stmt->children[7]); /* aux2 */
+        compile_expression(cs, stmt->children[9]); /* device/filename */
+        compiler_emit_no_operand(cs, OP_XIO);
+    }
+}
+
+static void compile_poke_stmt(CompilerState *cs, ParseNode *stmt) {
+    /* POKE address, value
+     * Parse tree: POKE <EXP> , <EXP> <EOS>
+     * children[0] = address expression
+     * children[1] = comma
+     * children[2] = value expression
+     */
+    if (stmt->child_count >= 3) {
+        compile_expression(cs, stmt->children[0]); /* address */
+        compile_expression(cs, stmt->children[2]); /* value */
+        compiler_emit_no_operand(cs, OP_POKE);
+    }
+}
+
+/* Compilation dispatch table */
+static const CompilationEntry compilation_table[] = {
+    {TOK_IDENT, compile_let_stmt},
+    {TOK_LET, compile_let_stmt},
+    {TOK_PRINT, compile_print},
+    {TOK_QUESTION, compile_print},
+    {TOK_INPUT, compile_input},
+    {TOK_IF, compile_if_then},
+    {TOK_GOTO, compile_goto},
+    {TOK_CGTO, compile_goto},
+    {TOK_GOSUB_S, compile_gosub},
+    {TOK_CGS, compile_gosub},
+    {TOK_ON, compile_on},
+    {TOK_RETURN, compile_return_stmt},
+    {TOK_CLR, compile_clr_stmt},
+    {TOK_CLEAR, compile_noop},
+    {TOK_DEFINT, compile_noop},
+    {TOK_DEFLNG, compile_noop},
+    {TOK_DEFSNG, compile_noop},
+    {TOK_DEFDBL, compile_noop},
+    {TOK_DEFSTR, compile_noop},
+    {TOK_CLS, compile_noop},
+    {TOK_POP, compile_pop_stmt},
+    {TOK_FOR, compile_for},
+    {TOK_NEXT, compile_next},
+    {TOK_END, compile_end_stmt},
+    {TOK_DEG, compile_deg_stmt},
+    {TOK_RAD, compile_rad_stmt},
+    {TOK_RANDOMIZE, compile_randomize_stmt},
+    {TOK_TRAP, compile_trap_stmt},
+    {TOK_XIO, compile_xio_stmt},
+    {TOK_STOP, compile_stop_stmt},
+    {TOK_DIM, compile_dim},
+    {TOK_DATA, compile_data},
+    {TOK_READ, compile_read},
+    {TOK_RESTORE, compile_restore_stmt},
+    {TOK_OPEN, compile_open_stmt},
+    {TOK_CLOSE, compile_close_stmt},
+    {TOK_PUT, compile_put_stmt},
+    {TOK_GET, compile_get_stmt},
+    {TOK_NOTE, compile_note_stmt},
+    {TOK_POINT, compile_point_stmt},
+    {TOK_STATUS, compile_status_stmt},
+    {TOK_POKE, compile_poke_stmt},
+    {0, NULL}  /* Sentinel */
+};
+
+/* 
+ * TABLE-DRIVEN STATEMENT COMPILATION
+ * 
+ * This function uses a dispatch table to compile statements instead of a large
+ * switch statement. Each statement type is mapped to its specific compiler function
+ * in the compilation_table array above.
+ * 
+ * Benefits:
+ * - More maintainable: each statement has its own focused function
+ * - Easier to extend: just add new entry to table
+ * - Better code organization: related logic is grouped
+ * - Consistent with table-driven parser design
+ */
 static void compile_statement(CompilerState *cs, ParseNode *stmt) {
+    int i;
+    
     if (!stmt) return;
     
+    /* Handle expression statements (assignments) */
     if (stmt->type != NODE_STATEMENT) {
-        /* Might be an expression statement or assignment */
         if (stmt->type == NODE_OPERATOR && stmt->token == TOK_CEQ) {
             compile_assignment(cs, stmt);
         }
         return;
     }
     
-    switch (stmt->token) {
-        case TOK_IDENT:
-        case TOK_LET:
-            /* Assignment: children are [var_expr, eq_op, value_expr, eos] */
-            if (stmt->child_count >= 3) {
-                ParseNode *var_expr = stmt->children[0];
-                ParseNode *value_expr = stmt->children[2];  /* Skip the '=' operator at child[1] */
-                ParseNode *actual_var;
-                int slot;
-                
-                /* Check if this is an array assignment (has subscripts) */
-                /* Array structure: var_expr has 2 children:
-                   [0]: EXPRESSION wrapping VARIABLE  
-                   [1]: EXPRESSION with 4 children: [TOK_CLPRN, subscript, maybe_more, TOK_CRPRN] */
-                if (var_expr->type == NODE_EXPRESSION && var_expr->child_count == 2) {
-                    ParseNode *var_part = var_expr->children[0];
-                    ParseNode *subscript_expr = var_expr->children[1];
-                    ParseNode *subscript1 = NULL;
-                    ParseNode *subscript2 = NULL;
-                    
-                    /* Unwrap variable */
-                    while (var_part && var_part->type == NODE_EXPRESSION && var_part->child_count > 0) {
-                        var_part = var_part->children[0];
-                    }
-                    
-                    /* Extract subscripts */
-                    if (subscript_expr && subscript_expr->child_count >= 2) {
-                        subscript1 = subscript_expr->children[1];
-                        /* For 2D arrays: child[2] is EXPRESSION containing [comma, sub2] */
-                        if (subscript_expr->child_count >= 4) {
-                            ParseNode *middle = subscript_expr->children[2];
-                            /* middle is EXPRESSION containing [comma_token, subscript2_value] */
-                            if (middle && middle->type == NODE_EXPRESSION && middle->child_count >= 2) {
-                                subscript2 = middle->children[1];  /* Get the actual subscript value */
-                            }
-                        }
-                    }
-                    
-                    if (var_part && var_part->type == NODE_VARIABLE && var_part->text && subscript1) {
-                        /* Array assignment confirmed */
-                        int is_string = strchr(var_part->text, '$') != NULL;
-                        
-                        slot = compiler_find_variable(cs, var_part->text);
-                        if (slot < 0) {
-                            slot = compiler_add_variable(cs, var_part->text, get_var_type(var_part->text));
-                        }
-                        
-                        /* Compile subscripts and value */
-                        compile_expression(cs, subscript1);
-                        if (subscript2) {
-                            compile_expression(cs, subscript2);
-                        }
-                        compile_expression(cs, value_expr);
-                        
-                        /* Emit array store */
-                        if (subscript2) {
-                            if (is_string) {
-                                compiler_emit(cs, OP_STR_ARRAY_SET_2D, slot);
-                            } else {
-                                compiler_emit(cs, OP_ARRAY_SET_2D, slot);
-                            }
-                        } else {
-                            if (is_string) {
-                                compiler_emit(cs, OP_STR_ARRAY_SET_1D, slot);
-                            } else {
-                                compiler_emit(cs, OP_ARRAY_SET_1D, slot);
-                            }
-                        }
-                        break;
-                    }
-                }
-                
-                /* Simple variable assignment */
-                actual_var = var_expr;
-                while (actual_var && actual_var->type == NODE_EXPRESSION && actual_var->child_count > 0) {
-                    actual_var = actual_var->children[0];
-                }
-                
-                if (!actual_var || actual_var->type != NODE_VARIABLE || !actual_var->text) {
-                    break;
-                }
-                
-                slot = compiler_find_variable(cs, actual_var->text);
-                if (slot < 0) {
-                    slot = compiler_add_variable(cs, actual_var->text, get_var_type(actual_var->text));
-                }
-                
-                compile_expression(cs, value_expr);
-                
-                /* Use appropriate opcode based on variable type */
-                if (get_var_type(actual_var->text) == VAR_STRING) {
-                    compiler_emit(cs, OP_STR_POP_VAR, slot);
-                } else {
-                    compiler_emit(cs, OP_POP_VAR, slot);
-                }
-            }
-            break;
-            
-        case TOK_PRINT:
-        case TOK_QUESTION:
-            compile_print(cs, stmt);
-            break;
-            
-        case TOK_INPUT:
-            compile_input(cs, stmt);
-            break;
-
-            
-        case TOK_IF:
-            compile_if_then(cs, stmt);
-            break;
-            
-        case TOK_GOTO:
-        case TOK_CGTO:
-            compile_goto(cs, stmt);
-            break;
-            
-        case TOK_GOSUB_S:
-        case TOK_CGS:
-            compile_gosub(cs, stmt);
-            break;
-            
-        case TOK_ON:
-            compile_on(cs, stmt);
-            break;
-            
-        case TOK_RETURN:
-            compiler_emit_no_operand(cs, OP_RETURN);
-            break;
-            
-        case TOK_CLR:
-            compiler_emit_no_operand(cs, OP_CLR);
-            break;
-            
-        case TOK_CLEAR:
-            /* Microsoft BASIC CLEAR statement - no-op for now */
-            /* Would normally clear variables and set memory limits */
-            break;
-            
-        case TOK_DEFINT:
-        case TOK_DEFLNG:
-        case TOK_DEFSNG:
-        case TOK_DEFDBL:
-        case TOK_DEFSTR:
-            /* Microsoft BASIC DEFtype statements - no-op for now */
-            /* Would normally define default variable types by letter range */
-            break;
-            
-        case TOK_CLS:
-            /* Microsoft BASIC CLS statement - no-op for now */
-            /* Would normally clear screen */
-            break;
-            
-        case TOK_POP:
-            compiler_emit_no_operand(cs, OP_POP_GOSUB);
-            break;
-            
-        case TOK_FOR:
-            compile_for(cs, stmt);
-            break;
-            
-        case TOK_NEXT:
-            compile_next(cs, stmt);
-            break;
-            
-        case TOK_END:
-            compiler_emit_no_operand(cs, OP_END);
-            break;
-            
-        case TOK_DEG:
-            compiler_emit_no_operand(cs, OP_DEG);
-            break;
-            
-        case TOK_RAD:
-            compiler_emit_no_operand(cs, OP_RAD);
-            break;
-            
-        case TOK_RANDOMIZE:
-            /* RANDOMIZE expression - seed RNG with value or TIMER */
-            /* RANDOMIZE requires an argument (numeric expression or TIMER keyword) */
-            
-            if (stmt->child_count == 0 ||
-                (stmt->children[0]->type == NODE_EXPRESSION &&
-                 stmt->children[0]->child_count == 1 &&
-                 (stmt->children[0]->children[0]->token == TOK_CCR ||
-                  stmt->children[0]->children[0]->token == TOK_CEOS))) {
-                /* RANDOMIZE with no argument is an error */
-                fprintf(stderr, "Error: RANDOMIZE requires an argument\n");
-                break;
-            }
-            
-            /* RANDOMIZE with argument - compile expression and use as seed */
-            compile_expression(cs, stmt->children[0]);
-            compiler_emit_no_operand(cs, OP_RANDOMIZE);
-            break;
-            
-        case TOK_TRAP:
-            /* TRAP line_number */
-            if (stmt->child_count >= 1) {
-                ParseNode *target = stmt->children[0];
-                if (target->type == NODE_CONSTANT) {
-                    uint16_t line = (uint16_t)target->value;
-                    int32_t offset = compiler_find_line_offset(cs, line);
-                    if (offset >= 0) {
-                        compiler_emit(cs, OP_TRAP, offset);
-                    } else {
-                        /* Forward reference */
-                        compiler_emit(cs, OP_TRAP, 0xFFFF);
-                        compiler_add_jump_fixup(cs, cs->program->code_len - 1, line, JUMP_ABSOLUTE);
-                    }
-                }
-            }
-            break;
-            
-        case TOK_XIO:
-            /* XIO command, #, channel, aux1, aux2, device_string */
-            /* Children: [0]=cmd, [1]=comma, [2]=#, [3]=chan, [4]=comma, [5]=aux1, [6]=comma, [7]=aux2, [8]=comma, [9]=device, [10]=EOS */
-            if (stmt->child_count >= 10) {
-                compile_expression(cs, stmt->children[0]); /* command */
-                compile_expression(cs, stmt->children[3]); /* channel */
-                compile_expression(cs, stmt->children[5]); /* aux1 */
-                compile_expression(cs, stmt->children[7]); /* aux2 */
-                compile_expression(cs, stmt->children[9]); /* device/filename */
-                compiler_emit_no_operand(cs, OP_XIO);
-            }
-            break;
-            
-        case TOK_STOP:
-            compiler_emit_no_operand(cs, OP_STOP);
-            break;
-            
-        case TOK_DIM:
-            compile_dim(cs, stmt);
-            break;
-            
-        case TOK_DATA:
-            compile_data(cs, stmt);
-            break;
-            
-        case TOK_READ:
-            compile_read(cs, stmt);
-            break;
-            
-        case TOK_RESTORE:
-            if (stmt->child_count > 0) {
-                compile_expression(cs, stmt->children[0]);
-                compiler_emit_no_operand(cs, OP_RESTORE_LINE);
-            } else {
-                compiler_emit(cs, OP_RESTORE, 0);
-            }
-            break;
-            
-        case TOK_OPEN:
-            /* OPEN #channel, mode, aux, "filename" */
-            /* Compile channel, mode, aux, filename */
-            if (stmt->child_count >= 7) {
-                compile_expression(cs, stmt->children[1]); /* channel */
-                compile_expression(cs, stmt->children[3]); /* mode */
-                compile_expression(cs, stmt->children[5]); /* aux */
-                compile_expression(cs, stmt->children[7]); /* filename */
-                compiler_emit_no_operand(cs, OP_OPEN);
-            }
-            break;
-            
-        case TOK_CLOSE:
-            /* CLOSE #channel or CLOSE */
-            if (stmt->child_count >= 2) {
-                compile_expression(cs, stmt->children[1]); /* channel */
-                compiler_emit_no_operand(cs, OP_CLOSE);
-            } else {
-                /* CLOSE without channel - close all */
-                compiler_emit(cs, OP_PUSH_CONST, 0);
-                compiler_emit_no_operand(cs, OP_CLOSE);
-            }
-            break;
-            
-        case TOK_PUT:
-            /* PUT #channel, value */
-            if (stmt->child_count >= 3) {
-                compile_expression(cs, stmt->children[1]); /* channel */
-                compile_expression(cs, stmt->children[3]); /* value */
-                compiler_emit_no_operand(cs, OP_PUT);
-            }
-            break;
-            
-        case TOK_GET:
-            /* GET #channel, variable */
-            if (stmt->child_count >= 3) {
-                ParseNode *var = stmt->children[3];
-                ParseNode *var_node;
-                int slot;
-                
-                compile_expression(cs, stmt->children[1]); /* channel */
-                compiler_emit_no_operand(cs, OP_GET);
-                
-                /* Navigate to actual variable */
-                var_node = var;
-                while (var_node && var_node->type == NODE_EXPRESSION && var_node->child_count > 0) {
-                    var_node = var_node->children[0];
-                }
-                
-                if (!var_node || !var_node->text) break;
-                
-                /* Store result in variable */
-                slot = compiler_find_variable(cs, var_node->text);
-                if (slot < 0) {
-                    slot = compiler_add_variable(cs, var_node->text, get_var_type(var_node->text));
-                }
-                compiler_emit(cs, OP_POP_VAR, slot);
-            }
-            break;
-            
-        case TOK_NOTE:
-            /* NOTE #channel, sector_var, byte_var */
-            if (stmt->child_count >= 5) {
-                ParseNode *sec_var = stmt->children[3];
-                ParseNode *byte_var = stmt->children[5];
-                ParseNode *sec_node, *byte_node;
-                int sec_slot, byte_slot;
-                
-                compile_expression(cs, stmt->children[1]); /* channel */
-                compiler_emit_no_operand(cs, OP_NOTE);
-                
-                /* Navigate to actual variables */
-                sec_node = sec_var;
-                while (sec_node && sec_node->type == NODE_EXPRESSION && sec_node->child_count > 0) {
-                    sec_node = sec_node->children[0];
-                }
-                byte_node = byte_var;
-                while (byte_node && byte_node->type == NODE_EXPRESSION && byte_node->child_count > 0) {
-                    byte_node = byte_node->children[0];
-                }
-                
-                if (!sec_node || !sec_node->text || !byte_node || !byte_node->text) break;
-                
-                /* Store results in variables */
-                sec_slot = compiler_find_variable(cs, sec_node->text);
-                if (sec_slot < 0) {
-                    sec_slot = compiler_add_variable(cs, sec_node->text, get_var_type(sec_node->text));
-                }
-                byte_slot = compiler_find_variable(cs, byte_node->text);
-                if (byte_slot < 0) {
-                    byte_slot = compiler_add_variable(cs, byte_node->text, get_var_type(byte_node->text));
-                }
-                
-                compiler_emit(cs, OP_POP_VAR, byte_slot);  /* byte position */
-                compiler_emit(cs, OP_POP_VAR, sec_slot);   /* sector */
-            }
-            break;
-            
-        case TOK_POINT:
-            /* POINT #channel, sector, byte */
-            if (stmt->child_count >= 5) {
-                compile_expression(cs, stmt->children[1]); /* channel */
-                compile_expression(cs, stmt->children[3]); /* sector */
-                compile_expression(cs, stmt->children[5]); /* byte */
-                compiler_emit_no_operand(cs, OP_POINT);
-            }
-            break;
-            
-        case TOK_STATUS:
-            /* STATUS #channel, variable */
-            if (stmt->child_count >= 3) {
-                ParseNode *var = stmt->children[3];
-                ParseNode *var_node;
-                int slot;
-                
-                compile_expression(cs, stmt->children[1]); /* channel */
-                compiler_emit_no_operand(cs, OP_STATUS);
-                
-                /* Navigate to actual variable */
-                var_node = var;
-                while (var_node && var_node->type == NODE_EXPRESSION && var_node->child_count > 0) {
-                    var_node = var_node->children[0];
-                }
-                
-                if (!var_node || !var_node->text) break;
-                
-                /* Store result in variable */
-                slot = compiler_find_variable(cs, var_node->text);
-                if (slot < 0) {
-                    slot = compiler_add_variable(cs, var_node->text, get_var_type(var_node->text));
-                }
-                compiler_emit(cs, OP_POP_VAR, slot);
-            }
-            break;
-            
-        default:
-            /* Unknown or unimplemented statement */
-            break;
+    /* Look up statement compiler in dispatch table */
+    for (i = 0; compilation_table[i].compiler != NULL; i++) {
+        if (compilation_table[i].token == stmt->token) {
+            compilation_table[i].compiler(cs, stmt);
+            return;
+        }
     }
+    
+    /* Unknown or unimplemented statement - silently ignore */
 }
 
 /* Main compilation entry point */

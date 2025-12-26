@@ -1,4 +1,5 @@
 /* vm.c - Virtual machine executor */
+#define _POSIX_C_SOURCE 200112L  /* Enable snprintf */
 #include "vm.h"
 #include <stdlib.h>
 #include <string.h>
@@ -128,6 +129,20 @@ VMState* vm_init(CompiledProgram *program) {
     vm->input_ptr = NULL;
     vm->input_available = 0;
     
+    /* Allocate simulated memory buffer (64KB) for PEEK/POKE */
+    vm->memory = calloc(65536, 1);
+    if (!vm->memory) {
+        free(vm->stack);
+        free(vm->str_stack);
+        free(vm->call_stack);
+        free(vm->for_stack);
+        free(vm->num_vars);
+        free(vm->str_vars);
+        free(vm->arrays);
+        free(vm);
+        return NULL;
+    }
+    
     vm->program = program;
     
     return vm;
@@ -182,6 +197,11 @@ void vm_free(VMState *vm) {
             fclose(vm->file_handles[i]);
             vm->file_handles[i] = NULL;
         }
+    }
+    
+    /* Free simulated memory buffer */
+    if (vm->memory) {
+        free(vm->memory);
     }
     
     free(vm);
@@ -403,6 +423,14 @@ void vm_error(VMState *vm, const char *message) {
     /* No trap - print error and halt */
     fprintf(stderr, "ERROR - %s\n", message);
     vm->running = 0;
+}
+
+/* Get variable name by slot */
+static const char* vm_get_var_name(VMState *vm, uint16_t slot) {
+    if (slot < vm->program->var_count) {
+        return vm->program->var_table[slot].name;
+    }
+    return "?";
 }
 
 /* Find line offset (binary search) */
@@ -979,7 +1007,12 @@ void vm_execute(VMState *vm) {
                 if (inst.operand != 0xFFFF) {
                     /* Variable specified - validate it matches the FOR loop */
                     if (loop->var_slot != inst.operand) {
-                        vm_error(vm, "NEXT WITHOUT FOR");
+                        char err_msg[256];
+                        snprintf(err_msg, sizeof(err_msg),
+                                "NEXT variable mismatch: expected %s, got %s",
+                                vm_get_var_name(vm, loop->var_slot),
+                                vm_get_var_name(vm, inst.operand));
+                        vm_error(vm, err_msg);
                         break;
                     }
                     var_slot = inst.operand;
@@ -1551,6 +1584,49 @@ void vm_execute(VMState *vm) {
                 break;
             }
             
+            case OP_FUNC_PEEK: {
+                /* PEEK(address) - returns byte value at memory location */
+                double addr_d = vm_pop(vm);
+                int addr = (int)addr_d;
+                unsigned char value = 0;
+                
+                /* Validate address range (0-65535) */
+                if (addr < 0 || addr > 65535) {
+                    vm_error(vm, "ILLEGAL ADDRESS IN PEEK");
+                    break;
+                }
+                
+                /* Read from simulated memory buffer */
+                value = vm->memory[addr];
+                vm_push(vm, (double)value);
+                
+                vm->pc++;
+                break;
+            }
+            
+            case OP_POKE: {
+                /* POKE address, value - writes byte value to memory location */
+                double value_d = vm_pop(vm);
+                double addr_d = vm_pop(vm);
+                int addr = (int)addr_d;
+                int byte_val = (int)value_d;
+                
+                /* Validate address range (0-65535) */
+                if (addr < 0 || addr > 65535) {
+                    vm_error(vm, "ILLEGAL ADDRESS IN POKE");
+                    break;
+                }
+                
+                /* Only use low order byte (0-255) per Microsoft BASIC spec */
+                byte_val = byte_val & 0xFF;
+                
+                /* Write to simulated memory buffer */
+                vm->memory[addr] = (unsigned char)byte_val;
+                
+                vm->pc++;
+                break;
+            }
+            
             /* Array Operations */
             case OP_DIM_1D: {
                 double size_d = vm_pop(vm);
@@ -1879,11 +1955,20 @@ void vm_execute(VMState *vm) {
                 } else {
                     DataEntry *entry = &vm->program->data_entries[vm->data_pointer++];
                     
-                    if (entry->type != DATA_NUMERIC) {
-                        vm_error(vm, "TYPE MISMATCH IN DATA");
-                    } else {
+                    if (entry->type == DATA_STRING) {
+                        /* String to numeric conversion (per Microsoft BASIC spec) */
+                        /* Identifiers in DATA convert to 0, not error */
+                        const char *str = vm->program->data_string_pool[entry->value.string_idx];
+                        double value = atof(str);  /* atof returns 0 for non-numeric strings */
+                        vm->num_vars[inst.operand] = value;
+                    } else if (entry->type == DATA_NUMERIC) {
                         double value = vm->program->data_numeric_pool[entry->value.numeric_idx];
                         vm->num_vars[inst.operand] = value;
+                    } else if (entry->type == DATA_NULL) {
+                        /* NULL data item - convert to 0 for numeric variable */
+                        vm->num_vars[inst.operand] = 0;
+                    } else {
+                        vm_error(vm, "TYPE MISMATCH IN DATA");
                     }
                 }
                 
@@ -1896,16 +1981,29 @@ void vm_execute(VMState *vm) {
                     vm_error(vm, "OUT OF DATA");
                 } else {
                     DataEntry *entry = &vm->program->data_entries[vm->data_pointer++];
+                    char buffer[64];
+                    const char *str_value;
                     
-                    if (entry->type != DATA_STRING) {
-                        vm_error(vm, "TYPE MISMATCH IN DATA");
+                    if (entry->type == DATA_STRING) {
+                        /* Direct string value */
+                        str_value = vm->program->data_string_pool[entry->value.string_idx];
+                    } else if (entry->type == DATA_NUMERIC) {
+                        /* Numeric to string conversion (per Microsoft BASIC spec) */
+                        double value = vm->program->data_numeric_pool[entry->value.numeric_idx];
+                        sprintf(buffer, "%g", value);
+                        str_value = buffer;
+                    } else if (entry->type == DATA_NULL) {
+                        /* NULL data item - convert to empty string for string variable */
+                        str_value = "";
                     } else {
-                        const char *str = vm->program->data_string_pool[entry->value.string_idx];
-                        if (vm->str_vars[inst.operand]) {
-                            free(vm->str_vars[inst.operand]);
-                        }
-                        vm->str_vars[inst.operand] = my_strdup(str);
+                        vm_error(vm, "TYPE MISMATCH IN DATA");
+                        break;
                     }
+                    
+                    if (vm->str_vars[inst.operand]) {
+                        free(vm->str_vars[inst.operand]);
+                    }
+                    vm->str_vars[inst.operand] = my_strdup(str_value);
                 }
                 
                 vm->pc++;

@@ -1,0 +1,33 @@
+Testing PEEK and POKE functions...
+
+Test 1: Basic POKE and PEEK
+  PASS: POKE/PEEK at address 100
+
+Test 2: Boundary values
+  PASS: Boundary values 0, 255, 128
+
+Test 3: Low byte extraction
+  PASS: Low byte extraction working
+
+Test 4: Multiple independent locations
+  PASS: Multiple locations independent
+
+Test 5: Sequential memory addresses
+  PASS: Sequential addresses work
+
+Test 6: Overwriting existing values
+  PASS: Overwriting works correctly
+
+Test 7: High memory addresses (near 64KB)
+  PASS: High addresses work
+
+Test 8: Variable address and value
+  PASS: Variable addressing works
+
+Test 9: Expressions for address/value
+  PASS: Expressions work correctly
+
+Test 10: Initial memory state
+  PASS: Uninitialized memory is 0
+
+All PEEK/POKE tests PASSED!

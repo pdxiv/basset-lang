@@ -1,14 +1,15 @@
-# BASIC Test Suite
+# Basset BASIC Test Suite
 
-Comprehensive test suite for the BASIC implementation with 130 tests covering functionality, error handling, and tokenization.
+Comprehensive test suite for Basset BASIC with 145 tests covering table validation, functionality, error handling, and tokenization.
 
 ## Test Organization
 
 ```
 tests/
-├── run_all.sh        # Master test runner (runs all 3 suites)
-├── standard/         # Functional tests (110 tests)
-├── errors/           # Error detection tests (14 tests)
+├── run_all.sh        # Master test runner (runs all 4 test suites)
+├── validate_tables.sh # Table coverage validation
+├── standard/         # Functional tests (124 tests)
+├── errors/           # Error detection tests (15 tests)
 └── tokenizer/        # Tokenizer tests (6 tests)
 ```
 
@@ -45,38 +46,49 @@ make test
 
 ## Test Suite Details
 
-### Standard Tests (110 tests)
+### Standard Tests (121 tests)
 
-Located in `standard/`, these validate correct program execution:
+Located in `standard/`, organized by category, these validate correct program execution:
 
-**Basic Features:**
+**basics/** (12 tests)
 - Variable assignment and expressions
 - Arithmetic operations
-- Comparison operators
-- Boolean logic
+- Simple programs
 
-**Control Flow:**
+**control_flow/** (32 tests)
 - IF/THEN/ELSE statements
-- FOR/NEXT loops
-- GOTO/GOSUB/RETURN
-- ON GOTO/GOSUB
+- FOR/NEXT loops (including mismatch detection)
+- GOTO/GOSUB/RETURN (including forward references)
+- ON GOTO/GOSUB (including forward address tables)
 
-**I/O Operations:**
+**functions/** (7 tests)
+- Mathematical functions (SIN, COS, ATN, EXP, LOG, SQR, ABS, INT, SGN)
+- Utility functions (RND, PEEK)
+- Comprehensive function tests
+
+**strings/** (8 tests)
+- String functions (LEN, VAL, STR$, ASC, CHR$, LEFT$, RIGHT$, MID$)
+- String arrays and operations
+
+**arrays/** (2 tests)
+- Numeric arrays (1D and 2D)
+- String arrays
+
+**io/** (25 tests)
 - PRINT statement variants
 - INPUT statement
 - File I/O (OPEN, CLOSE, PRINT#, INPUT#)
 - Channel switching
-
-**Functions:**
-- Mathematical functions (SIN, COS, ATN, EXP, LOG, SQR, ABS, INT, SGN)
-- String functions (LEN, VAL, STR$, ASC, CHR$, LEFT$, RIGHT$, MID$)
-- Utility functions (RND, PEEK, PADDLE, STICK, STRIG)
-
-**Advanced Features:**
-- Arrays (1D and 2D)
-- String arrays
 - TAB function
-- Multi-statement lines
+
+**edge_cases/** (35 tests)
+- Variable limits (128 numeric variables, 128 string variables)
+- Array limits (64 arrays maximum)
+- FOR loop nesting (32 levels maximum)
+- GOSUB nesting (64 levels maximum)
+- FOR/NEXT mismatch detection
+- Complex statements
+- Special cases
 - Comments (REM and apostrophe)
 
 **Test File Patterns:**
@@ -173,7 +185,7 @@ VERBOSE=1 ./tests/tokenizer/run.sh
 
 ## Test Coverage
 
-Current coverage: **130 tests, 100% passing**
+Current coverage: **141 tests, 100% passing**
 
 - ✅ All basic statements implemented
 - ✅ All operators and precedence
@@ -181,6 +193,7 @@ Current coverage: **130 tests, 100% passing**
 - ✅ Control flow (IF/FOR/GOTO/GOSUB/ON)
 - ✅ I/O operations (PRINT/INPUT/FILES)
 - ✅ Arrays (1D/2D, numeric/string)
+- ✅ Architectural limits (variables, arrays, nesting depth)
 - ✅ Error detection
 - ✅ Tokenizer correctness
 

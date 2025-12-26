@@ -1,15 +1,15 @@
-# Quick Start Guide
+# Basset BASIC Quick Start Guide
 
 ## Building
 
 ```bash
-make all
+make
 ```
 
 This creates:
-- `basset_compile` - Compiler (BASIC → bytecode)
-- `basset_vm` - Virtual machine (runs bytecode)
-- `basset_disasm` - Disassembler
+- `basset_compile` - Basset BASIC compiler (BASIC → bytecode)
+- `basset_vm` - Basset BASIC virtual machine (runs bytecode)
+- `basset_disasm` - Bytecode disassembler
 - `basset_asm` - Assembler
 - `basset_tokenize` - Tokenizer debugger
 
@@ -73,7 +73,7 @@ View compiled bytecode:
 ## Testing
 
 ```bash
-# Run all 130 tests
+# Run all 141 tests
 make test
 
 # Or run individual test suites
@@ -134,4 +134,4 @@ Run the full test suite:
 make test
 ```
 
-Current status: **130/130 tests passing (100%)**
+Current status: **141/141 tests passing (100%)**

@@ -1,4 +1,5 @@
 /* parser.c - Truly Table-Driven Parser Implementation */
+#define _POSIX_C_SOURCE 200809L
 #include "parser.h"
 #include "syntax_tables.h"
 #include <stdlib.h>
@@ -320,159 +321,288 @@ static int get_operator_precedence(unsigned char token, int on_stack) {
     return 0;
 }
 
+/* Forward declarations for parse actions */
+static ParseNode* parse_expression_pratt_prec(Parser *p, int min_prec);
+static ParseNode* parse_expression_pratt(Parser *p);
+
+/* ===== Parse Action Functions (Data-Driven Pratt Parser) ===== */
+
+/* Parse number literal */
+static ParseNode* parse_number_literal(Parser *p, ParseNode *left) {
+    Token *tok = tokenizer_peek(p->tokenizer);
+    ParseNode *node = node_create(NODE_CONSTANT);
+    node->value = tok->value;
+    node->token = TOK_NUMBER;
+    tokenizer_next(p->tokenizer);
+    return node;
+}
+
+/* Parse string literal */
+static ParseNode* parse_string_literal(Parser *p, ParseNode *left) {
+    Token *tok = tokenizer_peek(p->tokenizer);
+    ParseNode *node = node_create(NODE_CONSTANT);
+    node->token = TOK_STRING;
+    node->text = my_strdup(tok->text);
+    tokenizer_next(p->tokenizer);
+    return node;
+}
+
+/* Parse variable (with optional array subscripts) */
+static ParseNode* parse_variable(Parser *p, ParseNode *left) {
+    Token *tok = tokenizer_peek(p->tokenizer);
+    ParseNode *var = node_create(NODE_VARIABLE);
+    var->text = my_strdup(tok->text);
+    var->token = TOK_IDENT;
+    tokenizer_next(p->tokenizer);
+    
+    /* Check for array subscripts */
+    if (tokenizer_peek(p->tokenizer)->type == TOK_CLPRN) {
+        ParseNode *subscript1;
+        ParseNode *subscript2;
+        tokenizer_next(p->tokenizer);  /* Consume '(' */
+        
+        /* Parse first subscript */
+        if (tokenizer_peek(p->tokenizer)->type != TOK_CRPRN) {
+            subscript1 = parse_expression_pratt(p);
+            node_add_child(var, subscript1);
+            
+            /* Check for second subscript (2D array) */
+            if (tokenizer_peek(p->tokenizer)->type == TOK_CCOM) {
+                tokenizer_next(p->tokenizer);  /* Consume ',' */
+                subscript2 = parse_expression_pratt(p);
+                node_add_child(var, subscript2);
+            }
+        }
+        
+        if (!match_terminal(p, TOK_CRPRN)) {
+            set_error(p, "Expected ')' after array subscript");
+            return var;
+        }
+    }
+    
+    return var;
+}
+
+/* Parse parenthesized expression */
+static ParseNode* parse_parenthesized(Parser *p, ParseNode *left) {
+    ParseNode *expr;
+    tokenizer_next(p->tokenizer);  /* Consume '(' */
+    expr = parse_expression_pratt(p);
+    if (!match_terminal(p, TOK_CRPRN)) {
+        set_error(p, "Expected ')'");
+        return expr;
+    }
+    return expr;
+}
+
+/* Parse unary plus */
+static ParseNode* parse_unary_plus(Parser *p, ParseNode *left) {
+    ParseNode *operand;
+    tokenizer_next(p->tokenizer);  /* Consume '+' */
+    operand = parse_expression_pratt_prec(p, 7);  /* Unary precedence */
+    /* Optimization: +expr is just expr */
+    return operand;
+}
+
+/* Parse unary minus */
+static ParseNode* parse_unary_minus(Parser *p, ParseNode *left) {
+    ParseNode *operand, *neg;
+    tokenizer_next(p->tokenizer);  /* Consume '-' */
+    operand = parse_expression_pratt_prec(p, 7);  /* Unary precedence */
+    
+    neg = node_create(NODE_OPERATOR);
+    neg->token = TOK_CUMINUS;
+    node_add_child(neg, operand);
+    return neg;
+}
+
+/* Parse unary NOT */
+static ParseNode* parse_unary_not(Parser *p, ParseNode *left) {
+    ParseNode *operand, *not_node;
+    tokenizer_next(p->tokenizer);  /* Consume NOT */
+    operand = parse_expression_pratt_prec(p, 7);  /* Unary precedence */
+    
+    not_node = node_create(NODE_OPERATOR);
+    not_node->token = TOK_CNOT;
+    node_add_child(not_node, operand);
+    return not_node;
+}
+
+/* Parse function call */
+static ParseNode* parse_function_call(Parser *p, ParseNode *left) {
+    Token *tok = tokenizer_peek(p->tokenizer);
+    const FunctionEntry *func = get_function_metadata(tok->type);
+    ParseNode *call;
+    ParseNode *arg;
+    int arg_count = 0;
+    
+    if (!func) {
+        set_error(p, "Unknown function");
+        return NULL;
+    }
+    
+    call = node_create(NODE_FUNCTION_CALL);
+    call->token = tok->type;
+    tokenizer_next(p->tokenizer);
+    
+    /* Parse argument list - expect ( expr [, expr]* ) */
+    if (tokenizer_peek(p->tokenizer)->type == TOK_CLPRN) {
+        tokenizer_next(p->tokenizer);
+        if (tokenizer_peek(p->tokenizer)->type != TOK_CRPRN) {
+            /* Parse first argument */
+            arg = parse_expression_pratt(p);
+            node_add_child(call, arg);
+            arg_count++;
+            
+            /* Parse additional arguments separated by commas */
+            while (tokenizer_peek(p->tokenizer)->type == TOK_CCOM) {
+                tokenizer_next(p->tokenizer);  /* Skip comma */
+                arg = parse_expression_pratt(p);
+                node_add_child(call, arg);
+                arg_count++;
+            }
+        }
+        if (!match_terminal(p, TOK_CRPRN)) {
+            set_error(p, "Expected ')' after function argument");
+            return call;
+        }
+    }
+    
+    /* Validate arity */
+    if (arg_count < func->min_arity || 
+        (func->max_arity >= 0 && arg_count > func->max_arity)) {
+        char msg[128];
+        if (func->min_arity == func->max_arity) {
+            snprintf(msg, sizeof(msg), "%s expects %d argument%s, got %d",
+                     func->name, func->min_arity, 
+                     func->min_arity == 1 ? "" : "s", arg_count);
+        } else if (func->max_arity < 0) {
+            snprintf(msg, sizeof(msg), "%s expects at least %d argument%s, got %d",
+                     func->name, func->min_arity,
+                     func->min_arity == 1 ? "" : "s", arg_count);
+        } else {
+            snprintf(msg, sizeof(msg), "%s expects %d-%d arguments, got %d",
+                     func->name, func->min_arity, func->max_arity, arg_count);
+        }
+        set_error(p, msg);
+    }
+    
+    return call;
+}
+
+/* Parse binary operator (infix) */
+static ParseNode* parse_binary_op(Parser *p, ParseNode *left) {
+    Token *tok = tokenizer_peek(p->tokenizer);
+    unsigned char op = tok->type;
+    int prec = get_operator_precedence(op, 0);
+    ParseNode *right, *op_node;
+    
+    tokenizer_next(p->tokenizer);
+    
+    /* For right-associative operators (^), use same precedence, otherwise prec+1 */
+    if (op == TOK_CEXP) {
+        /* Right associative */
+        right = parse_expression_pratt_prec(p, prec);
+    } else {
+        /* Left associative */
+        right = parse_expression_pratt_prec(p, prec + 1);
+    }
+    
+    /* Create operator node */
+    op_node = node_create(NODE_OPERATOR);
+    op_node->token = op;
+    node_add_child(op_node, left);
+    node_add_child(op_node, right);
+    
+    return op_node;
+}
+
 /* Parse expression using operator precedence (Pratt parsing style) */
 static ParseNode* parse_expression_pratt(Parser *p) {
     return parse_expression_pratt_prec(p, 0);
 }
 
-/* Parse expression with minimum precedence (proper Pratt parser with precedence climbing) */
+/* Parse expression with minimum precedence (ENUM-BASED data-driven Pratt parser) */
 static ParseNode* parse_expression_pratt_prec(Parser *p, int min_prec) {
     Token *tok;
-    ParseNode *left, *right, *op_node;
-    unsigned char op;
+    ParseNode *left;
+    const OperatorEntry *op_entry;
     int prec;
     
     tok = tokenizer_peek(p->tokenizer);
     
-    /* Base case: number constant */
-    if (tok->type == TOK_NUMBER) {
-        left = node_create(NODE_CONSTANT);
-        left->value = tok->value;
-        left->token = TOK_NUMBER;
-        tokenizer_next(p->tokenizer);
-    }
-    /* String constant */
-    else if (tok->type == TOK_STRING) {
-        left = node_create(NODE_CONSTANT);
-        left->token = TOK_STRING;
-        left->text = my_strdup(tok->text);
-        tokenizer_next(p->tokenizer);
-    }
-    /* Variable */
-    else if (tok->type == TOK_IDENT) {
-        left = node_create(NODE_VARIABLE);
-        left->text = my_strdup(tok->text);
-        left->token = TOK_IDENT;
-        tokenizer_next(p->tokenizer);
-        
-        /* Check for array subscripts */
-        if (tokenizer_peek(p->tokenizer)->type == TOK_CLPRN) {
-            ParseNode *subscript1;
-            ParseNode *subscript2;
-            tokenizer_next(p->tokenizer);  /* Consume '(' */
-            
-            /* Parse first subscript */
-            if (tokenizer_peek(p->tokenizer)->type != TOK_CRPRN) {
-                subscript1 = parse_expression_pratt(p);
-                node_add_child(left, subscript1);
-                
-                /* Check for second subscript (2D array) */
-                if (tokenizer_peek(p->tokenizer)->type == TOK_CCOM) {
-                    tokenizer_next(p->tokenizer);  /* Consume ',' */
-                    subscript2 = parse_expression_pratt(p);
-                    node_add_child(left, subscript2);
-                }
-            }
-            
-            if (!match_terminal(p, TOK_CRPRN)) {
-                set_error(p, "Expected ')' after array subscript");
-                return left;
-            }
-        }
-    }
-    /* Parenthesized expression */
-    else if (tok->type == TOK_CLPRN) {
-        tokenizer_next(p->tokenizer);
-        left = parse_expression_pratt(p);
-        if (!match_terminal(p, TOK_CRPRN)) {
-            set_error(p, "Expected ')'");
-            return left;
-        }
-    }
-    /* Unary operators */
-    else if (tok->type == TOK_CPLUS || tok->type == TOK_CMINUS || tok->type == TOK_CNOT) {
-        op = tok->type;
-        tokenizer_next(p->tokenizer);
-        /* Unary operators have high precedence (7) */
-        right = parse_expression_pratt_prec(p, 7);
-        
-        op_node = node_create(NODE_OPERATOR);
-        op_node->token = (op == TOK_CPLUS) ? TOK_CUPLUS : 
-                        (op == TOK_CMINUS) ? TOK_CUMINUS : TOK_CNOT;
-        node_add_child(op_node, right);
-        left = op_node;
-    }
-    /* Function calls */
-    else if (tok->type == TOK_CSIN || tok->type == TOK_CCOS || tok->type == TOK_CATN ||
-             tok->type == TOK_CEXP_F || tok->type == TOK_CLOG || tok->type == TOK_CCLOG ||
-             tok->type == TOK_CSQR || tok->type == TOK_CABS || tok->type == TOK_CINT ||
-             tok->type == TOK_CSGN || tok->type == TOK_CRND || tok->type == TOK_CFRE ||
-             tok->type == TOK_CPEEK || tok->type == TOK_CPADD || tok->type == TOK_CSTIK ||
-             tok->type == TOK_CPTRG || tok->type == TOK_CSTRG ||
-             tok->type == TOK_CASC || tok->type == TOK_CVAL || tok->type == TOK_CLEN ||
-             tok->type == TOK_CADR || tok->type == TOK_CSTR || tok->type == TOK_CCHR ||
-             tok->type == TOK_CLEFT || tok->type == TOK_CRIGHT || tok->type == TOK_CMID ||
-             tok->type == TOK_CTAB) {
-        /* Create function call node */
-        left = node_create(NODE_FUNCTION_CALL);
-        left->token = tok->type;
-        tokenizer_next(p->tokenizer);
-        
-        /* Parse argument list - expect ( expr [, expr]* ) */
-        if (tokenizer_peek(p->tokenizer)->type == TOK_CLPRN) {
-            tokenizer_next(p->tokenizer);
-            if (tokenizer_peek(p->tokenizer)->type != TOK_CRPRN) {
-                /* Parse first argument */
-                right = parse_expression_pratt(p);
-                node_add_child(left, right);
-                
-                /* Parse additional arguments separated by commas */
-                while (tokenizer_peek(p->tokenizer)->type == TOK_CCOM) {
-                    tokenizer_next(p->tokenizer);  /* Skip comma */
-                    right = parse_expression_pratt(p);
-                    node_add_child(left, right);
-                }
-            }
-            if (!match_terminal(p, TOK_CRPRN)) {
-                set_error(p, "Expected ')' after function argument");
-                return left;
-            }
-        }
-    }
-    else {
+    /* === NULL DENOTATION (nud): Parse prefix/atom === */
+    op_entry = get_operator_entry(tok->type);
+    
+    if (!op_entry || op_entry->nud == PA_NONE) {
         set_error(p, "Expected expression");
         return NULL;
     }
     
-    /* Handle binary operators with precedence climbing */
+    /* Dispatch based on nud action type */
+    switch (op_entry->nud) {
+        case PA_NUMBER_LITERAL:
+            left = parse_number_literal(p, NULL);
+            break;
+        case PA_STRING_LITERAL:
+            left = parse_string_literal(p, NULL);
+            break;
+        case PA_VARIABLE:
+            left = parse_variable(p, NULL);
+            break;
+        case PA_PARENTHESIZED:
+            left = parse_parenthesized(p, NULL);
+            break;
+        case PA_UNARY_PLUS:
+            left = parse_unary_plus(p, NULL);
+            break;
+        case PA_UNARY_MINUS:
+            left = parse_unary_minus(p, NULL);
+            break;
+        case PA_UNARY_NOT:
+            left = parse_unary_not(p, NULL);
+            break;
+        case PA_FUNCTION_CALL:
+            left = parse_function_call(p, NULL);
+            break;
+        default:
+            set_error(p, "Invalid nud action");
+            return NULL;
+    }
+    
+    if (!left) {
+        return NULL;
+    }
+    
+    /* === LEFT DENOTATION (led): Handle infix/postfix operators === */
     while (1) {
         tok = tokenizer_peek(p->tokenizer);
-        op = tok->type;
+        op_entry = get_operator_entry(tok->type);
         
-        /* Check if this is a binary operator */
-        prec = get_operator_precedence(op, 0);  /* go-on-stack precedence */
-        if (prec == 0 || prec < min_prec) {
-            /* Not an operator or lower precedence, done */
+        /* No operator entry or no led action? Done. */
+        if (!op_entry || op_entry->led == PA_NONE) {
             break;
         }
         
-        tokenizer_next(p->tokenizer);
-        
-        /* For right-associative operators (^), use prec, otherwise prec+1 */
-        if (op == TOK_CEXP) {
-            /* Right associative - use same precedence */
-            right = parse_expression_pratt_prec(p, prec);
-        } else {
-            /* Left associative - use higher precedence */
-            right = parse_expression_pratt_prec(p, prec + 1);
+        /* Check precedence */
+        prec = op_entry->go_on_stack;
+        if (prec < min_prec) {
+            break;
         }
         
-        /* Create operator node */
-        op_node = node_create(NODE_OPERATOR);
-        op_node->token = op;
-        node_add_child(op_node, left);
-        node_add_child(op_node, right);
-        left = op_node;
+        /* Dispatch based on led action type */
+        switch (op_entry->led) {
+            case PA_BINARY_OP:
+                left = parse_binary_op(p, left);
+                break;
+            default:
+                set_error(p, "Invalid led action");
+                return NULL;
+        }
+        
+        if (!left) {
+            break;
+        }
     }
     
     return left;
@@ -495,6 +625,24 @@ static ParseNode* parse_nonterminal(Parser *p, NonTerminal nt) {
     if (nt == NT_STATEMENT) {
         return parser_parse_statement(p);
     }
+    
+    /* Special case: NT_REM_BODY - consume all tokens until EOS */
+    if (nt == NT_REM_BODY) {
+        node = node_create(NODE_STATEMENT);
+        node->token = TOK_REM;
+        
+        /* Consume all tokens until end of statement */
+        while (1) {
+            tok = tokenizer_peek(p->tokenizer);
+            if (tok->type == TOK_CEOS || tok->type == TOK_CCR || tok->type == TOK_EOF) {
+                break;
+            }
+            tokenizer_next(p->tokenizer);
+        }
+        return node;
+    }
+    
+    /* DATA_VAL is now handled by the grammar (supports epsilon for null values) */
     
     /* Special case: NT_IFBODY means parse statement(s) until ELSE or EOS */
     if (nt == NT_IFBODY) {
@@ -816,65 +964,16 @@ ParseNode* parser_parse_statement(Parser *p) {
         return NULL;
     }
     
-    /* Special handling for REM - consume rest of line/statement */
-    if (tok->type == TOK_REM) {
-        stmt = node_create(NODE_STATEMENT);
-        stmt->token = TOK_REM;
-        stmt->line_number = p->current_line_number;
-        tokenizer_next(p->tokenizer);
-        /* Consume tokens until EOS, CR, or EOF */
-        while (1) {
-            tok = tokenizer_peek(p->tokenizer);
-            if (tok->type == TOK_CCR || tok->type == TOK_EOF || tok->type == TOK_CEOS) {
-                break;
-            }
-            tokenizer_next(p->tokenizer);
-        }
-        /* Don't consume the terminator - let parse_program handle it */
-        return stmt;
-    }
-    
-    /* Special handling for DATA - parse comma-separated values */
-    if (tok->type == TOK_DATA) {
-        stmt = node_create(NODE_STATEMENT);
-        stmt->token = TOK_DATA;
-        stmt->line_number = p->current_line_number;
-        tokenizer_next(p->tokenizer);
-        /* Parse comma-separated values until EOS/CR/EOF */
-        while (1) {
-            ParseNode *value_node;
-            tok = tokenizer_peek(p->tokenizer);
-            if (tok->type == TOK_CCR || tok->type == TOK_EOF || tok->type == TOK_CEOS) {
-                break;
-            }
-            /* Skip commas */
-            if (tok->type == TOK_CCOM) {
-                tokenizer_next(p->tokenizer);
-                continue;
-            }
-            /* Parse number or string */
-            if (tok->type == TOK_NUMBER) {
-                value_node = node_create(NODE_CONSTANT);
-                value_node->token = TOK_NUMBER;
-                value_node->value = tok->value;
-                node_add_child(stmt, value_node);
-                tokenizer_next(p->tokenizer);
-            } else if (tok->type == TOK_STRING) {
-                value_node = node_create(NODE_CONSTANT);
-                value_node->token = TOK_STRING;
-                value_node->text = my_strdup(tok->text);
-                node_add_child(stmt, value_node);
-                tokenizer_next(p->tokenizer);
-            } else {
-                /* Unknown data element - skip it */
-                tokenizer_next(p->tokenizer);
-            }
-        }
-        /* Don't consume the terminator - let parse_program handle it */
-        return stmt;
-    }
-    
-    /* Special handling for PRINT - manually parse to track trailing separators */
+    /* 
+     * Special handling for PRINT - manually parse to track trailing separators
+     * 
+     * JUSTIFICATION: PRINT is kept as a special case because:
+     * 1. Complex syntax with optional channel, multiple alternating expressions/separators
+     * 2. Trailing separator detection affects formatting (semicolon = no newline)
+     * 3. Expression vs string output context depends on position
+     * 4. Table-driven approach would require 10+ new non-terminals for marginal benefit
+     * 5. PRINT is performance-critical for output and benefits from direct implementation
+     */
     if (tok->type == TOK_PRINT || tok->type == TOK_QUESTION) {
         ParseNode *channel_node = NULL;
         stmt = node_create(NODE_STATEMENT);

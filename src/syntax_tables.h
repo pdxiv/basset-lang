@@ -92,7 +92,11 @@ typedef enum {
     NT_L1,           /* List start */
     NT_L2,           /* List continuation */
     NT_REM,          /* <REM> statement */
+    NT_REM_BODY,     /* <REM_BODY> - REM content */
     NT_SDATA,        /* <DATA> statement */
+    NT_DATA_LIST,    /* <DATA_LIST> - DATA value list */
+    NT_DATA_TAIL,    /* <DATA_TAIL> - DATA list continuation */
+    NT_DATA_VAL,     /* <DATA_VAL> - Single DATA value */
     NT_NFSP,         /* Numeric function (string param) */
     NT_SFNP,         /* String function (numeric param) */
     NT_PUSR,         /* USR parameter list */
@@ -154,12 +158,28 @@ typedef struct {
     unsigned char data[3];     /* Additional data (address/token) */
 } SyntaxEntry;
 
+/* Parse action types - enum-based dispatch for data-driven parsing */
+typedef enum {
+    PA_NONE = 0,                /* No action */
+    PA_NUMBER_LITERAL,          /* Parse number literal */
+    PA_STRING_LITERAL,          /* Parse string literal */
+    PA_VARIABLE,                /* Parse variable (with optional array subscripts) */
+    PA_PARENTHESIZED,           /* Parse parenthesized expression */
+    PA_UNARY_PLUS,              /* Parse unary + */
+    PA_UNARY_MINUS,             /* Parse unary - */
+    PA_UNARY_NOT,               /* Parse unary NOT */
+    PA_FUNCTION_CALL,           /* Parse function call */
+    PA_BINARY_OP                /* Parse binary operator */
+} ParseActionType;
+
 /* Operator precedence table entry */
 typedef struct {
     unsigned char token;
     unsigned char go_on_stack;  /* Precedence when pushing */
     unsigned char come_off_stack; /* Precedence when popping */
     void (*executor)(void);     /* Execution function pointer */
+    ParseActionType nud;        /* Null denotation (prefix/atom) */
+    ParseActionType led;        /* Left denotation (infix/postfix) */
 } OperatorEntry;
 
 /* Keyword table entry */
@@ -175,6 +195,14 @@ typedef struct {
     NonTerminal syntax_rule;  /* Corresponding syntax rule */
 } StatementEntry;
 
+/* Function metadata table entry */
+typedef struct {
+    unsigned char token;      /* Function token (e.g., TOK_CSIN) */
+    const char *name;         /* Function name for error messages */
+    int min_arity;            /* Minimum number of arguments */
+    int max_arity;            /* Maximum number of arguments (-1 = unlimited) */
+} FunctionEntry;
+
 /* External table declarations */
 extern const KeywordEntry keyword_table[];
 extern const int keyword_table_size;
@@ -188,10 +216,15 @@ extern const int operator_table_size;
 extern const StatementEntry statement_table[];
 extern const int statement_table_size;
 
+extern const FunctionEntry function_table[];
+extern const int function_table_size;
+
 /* Syntax table lookup functions */
 void init_syntax_tables(void);
 const SyntaxEntry* get_syntax_rule(NonTerminal nt);
 NonTerminal get_statement_rule(unsigned char token);
+const FunctionEntry* get_function_metadata(unsigned char token);
+const OperatorEntry* get_operator_entry(unsigned char token);
 int is_terminal(unsigned char token);
 int match_token_class(unsigned char token, unsigned char pattern);
 

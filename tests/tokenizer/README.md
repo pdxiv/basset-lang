@@ -1,4 +1,4 @@
-# Tokenizer Test Suite
+# Basset BASIC Tokenizer Test Suite
 
 This directory contains tests for the `basset_tokenize` debugging tool.
 
