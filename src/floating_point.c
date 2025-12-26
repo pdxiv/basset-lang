@@ -8,7 +8,7 @@
 /* Convert double to string */
 void fp_to_string(double value, char *buffer, int bufsize) {
     /* Use standard C formatting for now */
-    /* Note: Using sprintf instead of snprintf for K&R C compatibility */
+    /* Note: Using sprintf instead of snprintf for C89 compatibility (snprintf is C99) */
     /* Caller must ensure buffer is large enough */
     (void)bufsize; /* Unused in sprintf version */
     sprintf(buffer, "%g", value);

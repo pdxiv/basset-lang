@@ -81,7 +81,7 @@ All modules use `syntax_tables` for keyword/token mapping.
 1. **Separation of Concerns**: Each module has a single, well-defined responsibility
 2. **Table-Driven**: Grammar and token mappings are data, not code
 3. **Classic Compatibility**: Token IDs and syntax tables compatible with classic BASIC implementations
-4. **K&R C Compliance**: ANSI C (C89) compatible code
+4. **C89 Compliance**: ANSI C89/C90 (ISO C90) standard with POSIX extensions
 
 ## Adding New Features
 

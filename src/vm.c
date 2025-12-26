@@ -11,7 +11,7 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-/* K&R C compatible strdup */
+/* C89 compatible strdup (POSIX strdup not in C89 standard) */
 static char* my_strdup(const char *s) {
     char *d;
     if (!s) return NULL;

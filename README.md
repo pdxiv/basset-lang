@@ -1,6 +1,6 @@
 # Basset BASIC
 
-A table-driven BASIC compiler and virtual machine implemented in K&R C for Linux.
+A table-driven BASIC compiler and virtual machine implemented in ANSI C89 for Linux.
 
 ## Overview
 
@@ -470,13 +470,15 @@ The implementation uses a table-driven architecture inspired by classic BASIC in
 3. **Historical accuracy**: Matches the original implementation's design
 4. **Compactness**: The original fit in 8KB ROM partially due to this design
 
-### K&R C Constraints
+### C89/C90 Standard
 
-The code follows K&R C (2nd ed) conventions:
+The code follows ANSI C89/C90 (ISO C90) conventions:
 
-- Variables declared at block start
-- ANSI function prototypes allowed
-- No C99/C11 features (no `//` comments, no mixed declarations, etc.)
+- Variables declared at block start (no mixed declarations)
+- ANSI function prototypes with parameter types
+- Standard library headers (`<stdlib.h>`, `<string.h>`, etc.)
+- No C99/C11 features (no `//` comments, no designated initializers, etc.)
+- Compiled with `-ansi -pedantic` for strict ISO C90 compliance
 
 ### Memory Management
 

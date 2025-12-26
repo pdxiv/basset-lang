@@ -187,7 +187,7 @@ See existing functions like `SIN`, `COS`, `ABS` for examples.
 
 ## Code Style
 
-- **Language**: K&R C (C89/C90) for maximum portability
+- **Language**: ANSI C89/C90 (ISO C90) for maximum portability
 - **Indentation**: 4 spaces (no tabs)
 - **Naming**: snake_case for functions, UPPER_CASE for macros/constants
 - **Comments**: Clear, concise explanations of non-obvious logic

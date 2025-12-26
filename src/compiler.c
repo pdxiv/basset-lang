@@ -12,7 +12,7 @@
 #define MAX_STRING_VARS 128
 #define MAX_ARRAYS 64
 
-/* K&R C compatible strdup */
+/* C89 compatible strdup (POSIX strdup not in C89 standard) */
 static char* my_strdup(const char *s) {
     char *d;
     if (!s) return NULL;

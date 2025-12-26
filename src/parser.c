@@ -6,7 +6,7 @@
 #include <string.h>
 #include <stdio.h>
 
-/* K&R C compatible strdup */
+/* C89 compatible strdup (POSIX strdup not in C89 standard) */
 static char* my_strdup(const char *s) {
     char *d;
     if (!s) return NULL;
@@ -1115,10 +1115,20 @@ ParseNode* parser_parse_statement(Parser *p) {
                         p->error_line_end = line_end;
                     }
                     
-                    if (err_tok->type == TOK_CCR || err_tok->type == TOK_EOF || err_tok->type == TOK_CEOS) {
-                        sprintf(msg, "Expected '=' for variable assignment");
+                    /* Check what follows the identifier to provide a better error message */
+                    if (err_tok->type == TOK_CLPRN) {
+                        /* Looks like a function call - unknown function name */
+                        sprintf(msg, "Unknown function '%s'", stmt_start_token.text);
+                    } else if (err_tok->type == TOK_CCR || err_tok->type == TOK_EOF || err_tok->type == TOK_CEOS) {
+                        /* Identifier alone on a line - unknown statement or missing '=' */
+                        sprintf(msg, "Unknown statement '%s' (or missing '=' for assignment)", stmt_start_token.text);
+                    } else if (err_tok->type == TOK_CCOM || err_tok->type == TOK_CSC) {
+                        /* Statement separator after identifier - probably unknown statement */
+                        sprintf(msg, "Unknown statement '%s'", stmt_start_token.text);
                     } else {
-                        sprintf(msg, "Expected '=' but found %s", token_name(err_tok->type));
+                        /* Has something else after it - probably missing '=' */
+                        sprintf(msg, "Expected '=' but found %s (for variable '%s' assignment)", 
+                                token_name(err_tok->type), stmt_start_token.text);
                     }
                 } else {
                     /* Generic syntax error for other statements */
