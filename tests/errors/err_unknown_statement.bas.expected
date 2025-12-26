@@ -1,4 +1,4 @@
-ERROR at line 10: Expected '=' but found IDENTIFIER
+ERROR at line 10: Expected '=' but found IDENTIFIER (for variable 'FOOBAR' assignment)
   10 FOOBAR X
      ^
 

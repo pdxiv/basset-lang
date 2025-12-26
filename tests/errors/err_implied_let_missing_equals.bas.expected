@@ -1,4 +1,4 @@
-ERROR at line 10: Expected '=' but found NUMBER
+ERROR at line 10: Expected '=' but found NUMBER (for variable 'X' assignment)
   10 X 5
      ^
 
