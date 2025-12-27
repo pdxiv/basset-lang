@@ -362,7 +362,7 @@ Provides numeric operations. Uses standard C `double` type for simplicity and po
 **Functions:**
 
 - ✓ Math functions: SIN, COS, ATN, LOG, CLOG, SQR, SGN, ABS, INT, EXP
-- ✓ Utility functions: RND, FRE, PEEK
+- ✓ Utility functions: RND, FRE, PEEK, ERR
 - ✓ Joystick functions: PADDLE, STICK, PTRIG, STRIG
 - ✓ String functions: STR$, CHR$, ASC, VAL, LEN, ADR
 - ✓ Substring functions: LEFT$, RIGHT$, MID$
@@ -381,8 +381,9 @@ Provides numeric operations. Uses standard C `double` type for simplicity and po
 - ✓ Nested IF statements
 - ✓ Array indexing (0-based allocation, 1-based string indexing)
 - ✓ File channel management (8 channels)
-- ✓ Error trapping
+- ✓ Error trapping (TRAP statement with ERR function)
 - ✓ DEG/RAD trigonometric modes
+- ✓ DATA/READ/RESTORE statements
 
 ### Limitations
 

@@ -28,11 +28,12 @@ This directory contains comprehensive technical documentation for Basset BASIC.
 
 **[Virtual_Machine.md](Virtual_Machine.md)**
 - Virtual machine internal design
-- Memory architecture and stacks (dual stack model)
+- Memory architecture and stacks (tagged value stack model)
 - Variable and array storage
 - Control flow mechanisms (FOR/NEXT, GOSUB/RETURN)
 - I/O system and channel management
-- Error handling and TRAP mechanism
+- Error handling (TRAP mechanism, ERR function, error codes)
+- DATA/READ/RESTORE support
 - Execution loop details
 
 ## Reference Documentation
@@ -93,13 +94,13 @@ This documentation covers **every facet** of the implementation:
 - Math functions (13 opcodes)
 
 ### Virtual Machine
-- Dual stack architecture (numeric and string)
+- Tagged value stack architecture (matches JVM, CLR, Lua, Python)
 - 128 variable slots each for numeric and string
 - Dynamic arrays (1D/2D, up to 32767 per dimension)
 - FOR stack (32 levels) and GOSUB stack (64 levels)
 - 8 I/O channels with file operations
-- TRAP error handling
-- DATA statement support
+- TRAP error handling with ERR function
+- DATA/READ/RESTORE statement support
 
 ## Source Code Cross-Reference
 

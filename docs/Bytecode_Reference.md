@@ -267,6 +267,12 @@ BASIC uses numeric logic: 0 = false, non-zero = true.
 - **Stack Effect**: `[string, start] → [substring]`
 - **Description**: Like OP_STR_MID but takes substring from `start` to end of string
 
+### OP_FN_ERR (0x3B)
+**Get last error code (ERR function)**
+
+- **Stack Effect**: `[] → [error_code]`
+- **Description**: Pushes the last error code as a numeric value. Returns 0 if no error has occurred. Used with TRAP for error handling. Error codes match Microsoft BASIC conventions (e.g., 11=division by zero, 13=type mismatch, 9=subscript range, 4=out of data)
+
 ---
 
 ## Array Operations (0x40-0x49)

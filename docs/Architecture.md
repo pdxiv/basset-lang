@@ -178,11 +178,13 @@ I/O Channels:      8 file handles
 
 ## Error Handling
 
-The system supports classic BASIC-style error trapping:
-- `TRAP <line>` - Set error handler
-- `TRAP 40000` - Disable trapping (continue on error)
-- Runtime errors jump to trap line
+The system supports classic BASIC-style error trapping with Microsoft BASIC compatible error codes:
+- `TRAP <line>` - Set error handler (jumps to line on errors)
+- `TRAP 40000` - Disable trapping (halt on error with message)
+- `ERR` function - Returns last error code (0 if no error)
+- Runtime errors jump to trap line when enabled
 - No trap = error message and program halt
+- Error codes: 1=NEXT without FOR, 3=RETURN without GOSUB, 4=Out of DATA, 5=Illegal function, 6=Overflow, 9=Subscript range, 11=Division by zero, 13=Type mismatch, 52-62=File I/O errors
 
 ## File Format Specifications
 
@@ -220,9 +222,9 @@ basset program.bas
 
 ## Testing
 
-Comprehensive test suite with 130+ tests:
-- **Standard Tests** (110): Core BASIC functionality
-- **Error Tests** (14): Error handling and edge cases
+Comprehensive test suite with 148 tests:
+- **Standard Tests** (127): Core BASIC functionality including ERR function tests
+- **Error Tests** (15): Error handling and edge cases
 - **Tokenizer Tests** (6): Lexical analysis validation
 
 All tests organized in `tests/` with self-contained runners.

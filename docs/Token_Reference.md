@@ -126,6 +126,7 @@ Function tokens represent built-in functions that return values.
 | TOK_CPTRG | 0x73 | PTRIG | Paddle trigger status |
 | TOK_CSTRG | 0x74 | STRIG | Joystick trigger status |
 | TOK_CTAB | 0x79 | TAB | Tab to column (PRINT context) |
+| TOK_CERR | 0x7A | ERR | Get last error code (error handling) |
 
 ### Statements (0x00-0x3D)
 

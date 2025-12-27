@@ -1,6 +1,6 @@
 # Basset BASIC Test Suite
 
-Comprehensive test suite for Basset BASIC with 145 tests covering table validation, functionality, error handling, and tokenization.
+Comprehensive test suite for Basset BASIC with 148 tests covering table validation, functionality, error handling, and tokenization.
 
 ## Test Organization
 
@@ -8,7 +8,7 @@ Comprehensive test suite for Basset BASIC with 145 tests covering table validati
 tests/
 ├── run_all.sh        # Master test runner (runs all 4 test suites)
 ├── validate_tables.sh # Table coverage validation
-├── standard/         # Functional tests (124 tests)
+├── standard/         # Functional tests (127 tests)
 ├── errors/           # Error detection tests (15 tests)
 └── tokenizer/        # Tokenizer tests (6 tests)
 ```
@@ -46,7 +46,7 @@ make test
 
 ## Test Suite Details
 
-### Standard Tests (121 tests)
+### Standard Tests (127 tests)
 
 Located in `standard/`, organized by category, these validate correct program execution:
 
@@ -81,12 +81,14 @@ Located in `standard/`, organized by category, these validate correct program ex
 - Channel switching
 - TAB function
 
-**edge_cases/** (35 tests)
+**edge_cases/** (38 tests)
 - Variable limits (128 numeric variables, 128 string variables)
 - Array limits (64 arrays maximum)
 - FOR loop nesting (32 levels maximum)
 - GOSUB nesting (64 levels maximum)
 - FOR/NEXT mismatch detection
+- TRAP error handling (multiple tests)
+- ERR function tests (2 tests)
 - Complex statements
 - Special cases
 - Comments (REM and apostrophe)
@@ -97,7 +99,7 @@ Located in `standard/`, organized by category, these validate correct program ex
 - `*.bas.input` - Input data (for INPUT statements)
 - `*.channel*.expected` - Expected file output from PRINT#
 
-### Error Tests (14 tests)
+### Error Tests (15 tests)
 
 Located in `errors/`, these validate proper error detection:
 

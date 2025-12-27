@@ -68,8 +68,10 @@ typedef struct {
     
     /* System State */
     int running;                 /* Program is executing */
-    int error_code;              /* Last error code */
+    int error_code;              /* Last error code (for ERR function) */
     int trap_line;               /* TRAP error handler line (-1 = disabled) */
+    int trap_enabled;            /* 1 if TRAP is active */
+    int trap_triggered;          /* 1 if trap was just triggered */
     int deg_mode;                /* Trig mode: 1=degrees, 0=radians */
     
 } VM;
@@ -389,15 +391,41 @@ DATA statements are extracted during compilation and stored separately. They don
 ## Error Handling
 
 ### Error Codes
-Common errors:
-- Division by zero
-- Out of memory
-- Array bounds exceeded
-- RETURN without GOSUB
-- NEXT without FOR
-- File not found
-- Syntax error in DATA
-- Type mismatch
+
+The VM maintains an `error_code` field that stores the last error code for use with the ERR function. Error codes follow Microsoft BASIC conventions:
+
+| Code | Constant | Description |
+|------|----------|-------------|
+| 0 | ERR_NONE | No error |
+| 1 | ERR_NEXT_WITHOUT_FOR | NEXT without FOR |
+| 3 | ERR_RETURN_WITHOUT_GOSUB | RETURN without GOSUB |
+| 4 | ERR_OUT_OF_DATA | Out of DATA |
+| 5 | ERR_ILLEGAL_FUNCTION | Illegal function call |
+| 6 | ERR_OVERFLOW | Overflow |
+| 9 | ERR_SUBSCRIPT_RANGE | Subscript out of range |
+| 11 | ERR_DIVISION_BY_ZERO | Division by zero |
+| 13 | ERR_TYPE_MISMATCH | Type mismatch |
+| 52 | ERR_BAD_FILE_NUMBER | Bad file number |
+| 53 | ERR_FILE_NOT_FOUND | File not found |
+| 57 | ERR_DEVICE_IO | Device I/O error |
+
+### ERR Function
+
+The `ERR` function returns the error code of the last error that occurred:
+
+```basic
+10 TRAP 1000
+20 X = 1 / 0
+30 END
+1000 PRINT "ERROR CODE: "; ERR
+1010 IF ERR = 11 THEN PRINT "DIVISION BY ZERO"
+1020 END
+```
+
+- Returns 0 if no error has occurred
+- Stores the error code when any runtime error happens
+- Works in conjunction with TRAP for sophisticated error handling
+- Error code persists until the next error occurs
 
 ### TRAP Mechanism
 
@@ -408,6 +436,7 @@ The TRAP mechanism allows programs to intercept runtime errors and handle them g
 int trap_enabled;        /* 1 if TRAP is active, 0 if disabled */
 int trap_line;           /* PC offset of trap handler line */
 int trap_triggered;      /* 1 if error occurred and trap was invoked */
+int error_code;          /* Last error code (for ERR function) */
 ```
 
 #### Setting Trap Handler
@@ -440,13 +469,31 @@ All runtime errors can be trapped:
 
 #### Error Handling Flow
 ```
-1. Error occurs during instruction execution (e.g., vm_pop_string() detects type mismatch)
-2. vm_error() is called with error message
-3. Error message is printed to stderr
-4. If trap_enabled && trap_line >= 0:
+1. Error occurs during instruction code and error message
+3. Error code is stored in vm->error_code (for ERR function)
+4. Error message is printed to stderr
+5. If trap_enabled && trap_line >= 0:
    a. Set vm->pc = trap_line (jump to handler)
    b. Set vm->trap_triggered = 1 (signal PC was changed)
    c. Set vm->trap_enabled = 0 (disable to prevent infinite loop)
+   d. Return to instruction (which checks trap_triggered and breaks)
+6. Else: halt program with error message
+```
+
+#### Using ERR with TRAP
+```basic
+10 TRAP 1000
+20 REM Try division by zero
+30 X = 1 / 0
+40 PRINT "This line never executes"
+50 END
+1000 REM Error handler
+1010 PRINT "Error "; ERR; " occurred"
+1020 IF ERR = 11 THEN PRINT "Division by zero"
+1030 IF ERR = 13 THEN PRINT "Type mismatch"
+1040 IF ERR = 9 THEN PRINT "Array bounds"
+1050 END
+```= 0 (disable to prevent infinite loop)
    d. Return to instruction
 5. Else (no trap):
    a. Set vm->running = 0 (halt program)
