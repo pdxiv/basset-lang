@@ -1,0 +1,6 @@
+PASS: ERR initially 0
+PASS: Division by zero ERR=11
+PASS: Type mismatch ERR=13
+PASS: Array bounds ERR=9
+PASS: Out of data ERR=4
+=== All ERR function tests passed ===

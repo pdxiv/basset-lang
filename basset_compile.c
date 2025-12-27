@@ -7,6 +7,7 @@
 #include "compiler.h"
 #include "bytecode_file.h"
 #include "syntax_tables.h"
+#include "keyword_hash.h"
 
 /* Read entire file into memory */
 static char* read_file(const char *filename) {
@@ -77,6 +78,9 @@ int main(int argc, char **argv) {
     
     /* Initialize syntax tables */
     init_syntax_tables();
+    
+    /* Initialize keyword hash table */
+    keyword_hash_init();
     
     /* Read source file */
     source = read_file(argv[1]);

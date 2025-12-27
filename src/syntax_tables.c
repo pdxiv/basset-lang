@@ -109,6 +109,7 @@ const KeywordEntry keyword_table[] = {
     {"LEFT$", TOK_CLEFT, 3},
     {"RIGHT$", TOK_CRIGHT, 3},
     {"MID$", TOK_CMID, 3},
+    {"ERR", TOK_CERR, 3},
     {"TAB", TOK_CTAB, 3},
     
     {NULL, 0, 0}  /* Sentinel */
@@ -176,6 +177,7 @@ const OperatorEntry operator_table[] = {
     {TOK_CLEFT,   0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
     {TOK_CRIGHT,  0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
     {TOK_CMID,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
+    {TOK_CERR,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
     {TOK_CTAB,    0, 0, NULL, PA_FUNCTION_CALL, PA_NONE},
     
     {0, 0, 0, NULL, PA_NONE, PA_NONE}  /* Sentinel */
@@ -213,6 +215,8 @@ const FunctionEntry function_table[] = {
     {TOK_CLEFT,   "LEFT$",  2, 2},
     {TOK_CRIGHT,  "RIGHT$", 2, 2},
     {TOK_CMID,    "MID$",   2, 3},
+    /* System functions */
+    {TOK_CERR,    "ERR",    0, 0},
     /* Special functions */
     {TOK_CTAB,    "TAB",    1, 1},
     {0, NULL, 0, 0}  /* Sentinel */

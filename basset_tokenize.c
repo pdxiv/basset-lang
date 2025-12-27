@@ -9,6 +9,7 @@
 #include <string.h>
 #include "tokenizer.h"
 #include "tokens.h"
+#include "keyword_hash.h"
 
 /* Read entire file into memory */
 static char* read_file(const char *filename) {
@@ -55,6 +56,9 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Error: Cannot open file '%s'\n", argv[1]);
         return 1;
     }
+    
+    /* Initialize keyword hash table */
+    keyword_hash_init();
     
     /* Initialize tokenizer */
     tokenizer_init(&tokenizer, source_code);

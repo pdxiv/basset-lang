@@ -1,0 +1,7 @@
+Test 1: LEN on number
+TRAPPED: Type mismatch in LEN
+Test 2: String arithmetic
+TRAPPED: Type mismatch in arithmetic
+Test 3: ASC on number
+TRAPPED: Type mismatch in ASC
+=== All TRAP type mismatch tests passed ===

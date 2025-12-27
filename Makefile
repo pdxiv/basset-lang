@@ -19,7 +19,9 @@ OBJDIR = obj
 COMMON_SOURCES = $(SRCDIR)/tokenizer.c \
                  $(SRCDIR)/parser.c \
                  $(SRCDIR)/syntax_tables.c \
-                 $(SRCDIR)/floating_point.c
+                 $(SRCDIR)/floating_point.c \
+                 $(SRCDIR)/util.c \
+                 $(SRCDIR)/keyword_hash.c
 
 COMPILER_SOURCES = $(SRCDIR)/compiler.c \
                    $(SRCDIR)/bytecode_file.c
@@ -51,7 +53,9 @@ COMPILE_OBJECTS = $(OBJDIR)/basset_compile.o \
                   $(OBJDIR)/compiler.o \
                   $(OBJDIR)/bytecode_file.o \
                   $(OBJDIR)/syntax_tables.o \
-                  $(OBJDIR)/floating_point.o
+                  $(OBJDIR)/floating_point.o \
+                  $(OBJDIR)/util.o \
+                  $(OBJDIR)/keyword_hash.o
 
 VM_OBJECTS = $(OBJDIR)/basset_vm.o \
              $(OBJDIR)/vm.o \
@@ -60,7 +64,9 @@ VM_OBJECTS = $(OBJDIR)/basset_vm.o \
              $(OBJDIR)/parser.o \
              $(OBJDIR)/tokenizer.o \
              $(OBJDIR)/syntax_tables.o \
-             $(OBJDIR)/floating_point.o
+             $(OBJDIR)/floating_point.o \
+             $(OBJDIR)/util.o \
+             $(OBJDIR)/keyword_hash.o
 
 DISASM_OBJECTS = $(OBJDIR)/basset_disasm.o \
                  $(OBJDIR)/bytecode_file.o \
@@ -68,7 +74,9 @@ DISASM_OBJECTS = $(OBJDIR)/basset_disasm.o \
                  $(OBJDIR)/parser.o \
                  $(OBJDIR)/tokenizer.o \
                  $(OBJDIR)/syntax_tables.o \
-                 $(OBJDIR)/floating_point.o
+                 $(OBJDIR)/floating_point.o \
+                 $(OBJDIR)/util.o \
+                 $(OBJDIR)/keyword_hash.o
 
 ASM_OBJECTS = $(OBJDIR)/basset_asm.o \
               $(OBJDIR)/bytecode_file.o \
@@ -76,13 +84,17 @@ ASM_OBJECTS = $(OBJDIR)/basset_asm.o \
               $(OBJDIR)/parser.o \
               $(OBJDIR)/tokenizer.o \
               $(OBJDIR)/syntax_tables.o \
-              $(OBJDIR)/floating_point.o
+              $(OBJDIR)/floating_point.o \
+              $(OBJDIR)/util.o \
+              $(OBJDIR)/keyword_hash.o
 
 TOKENIZE_OBJECTS = $(OBJDIR)/basset_tokenize.o \
                    $(OBJDIR)/tokenizer.o \
                    $(OBJDIR)/syntax_tables.o \
                    $(OBJDIR)/floating_point.o \
-                   $(OBJDIR)/parser.o
+                   $(OBJDIR)/parser.o \
+                   $(OBJDIR)/util.o \
+                   $(OBJDIR)/keyword_hash.o
 
 # Help target
 help:

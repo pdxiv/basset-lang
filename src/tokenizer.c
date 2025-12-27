@@ -1,6 +1,7 @@
 /* tokenizer.c - Classic BASIC Tokenizer Implementation */
 #include "tokenizer.h"
 #include "syntax_tables.h"
+#include "keyword_hash.h"
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -23,29 +24,9 @@ static int is_ident_cont(char c) {
     return isalnum(c) || c == '_';
 }
 
-/* Helper: match keyword in table */
+/* Helper: match keyword in table using hash table lookup */
 static int match_keyword(const char *text, int len, unsigned char *token) {
-    int i;
-    char upper[64];
-    int j;
-    
-    /* Convert to uppercase for comparison */
-    if (len >= 64) return 0;
-    
-    for (j = 0; j < len; j++) {
-        upper[j] = toupper(text[j]);
-    }
-    upper[len] = '\0';
-    
-    /* Search keyword table */
-    for (i = 0; i < keyword_table_size; i++) {
-        if (strcmp(upper, keyword_table[i].keyword) == 0) {
-            *token = keyword_table[i].token;
-            return 1;
-        }
-    }
-    
-    return 0;
+    return keyword_hash_lookup(text, len, token);
 }
 
 /* Read next token from input */
@@ -293,23 +274,6 @@ void tokenizer_init(Tokenizer *tok, const char *input) {
     tok->lookahead.text = NULL;
     
     /* Read first two tokens for lookahead */
-    read_token(tok, &tok->current);
-    read_token(tok, &tok->lookahead);
-}
-
-/* Refresh tokens after state restore (for backtracking) */
-void tokenizer_refresh(Tokenizer *tok) {
-    /* Free existing token text to prevent leaks */
-    if (tok->current.text) {
-        free(tok->current.text);
-        tok->current.text = NULL;
-    }
-    if (tok->lookahead.text) {
-        free(tok->lookahead.text);
-        tok->lookahead.text = NULL;
-    }
-    
-    /* Re-read tokens from current position */
     read_token(tok, &tok->current);
     read_token(tok, &tok->lookahead);
 }

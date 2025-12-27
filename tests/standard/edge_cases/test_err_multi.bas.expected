@@ -1,0 +1,13 @@
+Test 1: Division by zero
+  ERR=11 DIVISION BY ZERO
+Test 2: Type mismatch
+  ERR=13 TYPE MISMATCH
+Test 3: Array bounds
+  ERR=9 SUBSCRIPT OUT OF RANGE
+Test 4: NEXT without FOR
+  ERR=1 NEXT WITHOUT FOR
+Test 5: OUT OF DATA
+  ERR=4 OUT OF DATA
+Test 6: SQR of negative
+  ERR=5 ILLEGAL FUNCTION
+=== All multiple error tests passed ===

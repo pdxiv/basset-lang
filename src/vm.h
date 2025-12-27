@@ -4,9 +4,34 @@
 
 #include "compiler.h"
 #include "bytecode.h"
+#include "value.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+
+/* Error codes (compatible with Microsoft BASIC where applicable) */
+#define ERR_NONE                0   /* No error */
+#define ERR_NEXT_WITHOUT_FOR    1   /* NEXT without FOR */
+#define ERR_SYNTAX              2   /* Syntax error */
+#define ERR_RETURN_WITHOUT_GOSUB 3  /* RETURN without GOSUB */
+#define ERR_OUT_OF_DATA         4   /* Out of DATA */
+#define ERR_ILLEGAL_FUNCTION    5   /* Illegal function call */
+#define ERR_OVERFLOW            6   /* Overflow */
+#define ERR_OUT_OF_MEMORY       7   /* Out of memory */
+#define ERR_UNDEFINED_LINE      8   /* Undefined line number */
+#define ERR_SUBSCRIPT_RANGE     9   /* Subscript out of range */
+#define ERR_DUPLICATE_DEF       10  /* Duplicate definition */
+#define ERR_DIVISION_BY_ZERO    11  /* Division by zero */
+#define ERR_ILLEGAL_DIRECT      12  /* Illegal direct command */
+#define ERR_TYPE_MISMATCH       13  /* Type mismatch */
+#define ERR_OUT_OF_STRING_SPACE 14  /* Out of string space */
+#define ERR_FOR_NEXT_MISMATCH   15  /* FOR/NEXT variable mismatch */
+#define ERR_FILE_NOT_FOUND      53  /* File not found */
+#define ERR_BAD_FILE_MODE       54  /* Bad file mode */
+#define ERR_FILE_ALREADY_OPEN   55  /* File already open */
+#define ERR_INPUT_PAST_END      62  /* Input past end of file */
+#define ERR_BAD_FILE_NUMBER     52  /* Bad file number */
+#define ERR_DEVICE_IO           57  /* Device I/O error */
 
 /* Array storage */
 typedef struct {
@@ -35,15 +60,10 @@ typedef struct {
     uint8_t running;             /* 1 if executing, 0 if stopped */
     uint8_t break_flag;          /* Set when BREAK key pressed */
     
-    /* Value Stack (for expression evaluation) */
-    double *stack;               /* Stack of numeric values */
+    /* Expression Stack */
+    Value *stack;                /* Stack of tagged values */
     size_t stack_top;            /* Index of top element */
     size_t stack_capacity;       /* Allocated capacity */
-    
-    /* String Stack (for string expressions) */
-    char **str_stack;            /* Stack of string pointers */
-    size_t str_stack_top;
-    size_t str_stack_capacity;
     
     /* Call Stack (for GOSUB/RETURN) */
     uint32_t *call_stack;        /* Return addresses */
@@ -70,6 +90,7 @@ typedef struct {
     uint32_t trap_line;          /* TRAP error handler PC offset (0 = none) */
     uint8_t trap_enabled;        /* Is TRAP active? */
     uint8_t trap_triggered;      /* Was trap just triggered? (skip pc increment) */
+    int error_code;              /* Last error code (0 = no error, for ERR function) */
     size_t data_pointer;         /* Current position in DATA pool */
     
     /* Print state (for PRINT newline handling) */
@@ -106,10 +127,12 @@ void vm_free(VMState *vm);
 void vm_execute(VMState *vm);
 
 /* Stack operations */
-void vm_push(VMState *vm, double value);
-double vm_pop(VMState *vm);
-void vm_str_push(VMState *vm, const char *str);
-char* vm_str_pop(VMState *vm);
+void vm_push(VMState *vm, Value value);
+Value vm_pop(VMState *vm);
+void vm_push_number(VMState *vm, double n);
+void vm_push_string(VMState *vm, char *s);
+double vm_pop_number(VMState *vm);
+char* vm_pop_string(VMState *vm);
 
 /* Call stack operations */
 void vm_call_push(VMState *vm, uint32_t return_addr);
@@ -121,7 +144,7 @@ ForLoopState* vm_for_top(VMState *vm);
 void vm_for_pop(VMState *vm);
 
 /* Error handling */
-void vm_error(VMState *vm, const char *message);
+void vm_error(VMState *vm, int error_code, const char *message);
 
 /* Helper function for runtime line lookup */
 int32_t vm_find_line_offset(VMState *vm, uint16_t line_number);

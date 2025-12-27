@@ -11,8 +11,11 @@ Basset BASIC is a from-scratch implementation of a BASIC language compiler that 
 - **Enum-Based Pratt Parser**: Expression parsing uses data-driven enum dispatch with zero compiler warnings
 - **Function Metadata Table**: All 27 built-in functions with automatic arity validation
 - **Table-Driven Grammar**: Statement syntax rules encoded as BML (BASIC Meta-Language) bytecode
-- **Bytecode VM**: Fast bytecode interpreter with full BASIC feature support
-- **Comprehensive Tests**: 145 tests covering table validation, functionality, error handling, and tokenization
+- **Bytecode VM**: Fast bytecode interpreter with **industry-standard tagged stack** (matches JVM, CLR, Lua, Python)
+- **Comprehensive Tests**: 148 tests covering table validation, functionality, error handling, and tokenization
+- **Performance Optimizations**: O(1) keyword lookup, consolidated utilities, modern VM architecture
+
+See [IMPROVEMENTS_COMPLETED.md](IMPROVEMENTS_COMPLETED.md) for details on recent code quality improvements.
 
 ## Quick Start
 
@@ -143,15 +146,15 @@ Assemble bytecode from assembly format:
 
 ## Testing
 
-Comprehensive test suite with 136 tests:
+Comprehensive test suite with 148 tests:
 
 ```bash
 make test                    # Run all test suites
 ./tests/run_all.sh          # Alternative (same result)
 
 # Individual test suites:
-./tests/standard/run.sh     # 116 functional tests
-./tests/errors/run.sh       # 14 error detection tests
+./tests/standard/run.sh     # 127 functional tests
+./tests/errors/run.sh       # 15 error detection tests
 ./tests/tokenizer/run.sh    # 6 tokenizer tests
 ```
 
@@ -165,12 +168,12 @@ See [tests/README.md](tests/README.md) for detailed test documentation.
 
 ### Test Coverage
 
-**Standard Test Suite** (116 tests)
+**Standard Test Suite** (127 tests)
 
 - Statements, expressions, control flow, I/O, functions
-- Includes TAB function tests
+- Includes TAB function tests and ERR function tests
 
-**Error Test Suite** (14 tests)
+**Error Test Suite** (15 tests)
 
 - Compile-time error detection
 - Tests undefined labels, syntax errors, invalid constructs
@@ -183,13 +186,13 @@ See [tests/README.md](tests/README.md) for detailed test documentation.
 **Run all tests:**
 
 ```bash
-make test                # All test suites (143 tests total)
-make test-standard       # Just standard tests (123 tests)
-make test-errors         # Just error tests (14 tests)
+make test                # All test suites (148 tests total)
+make test-standard       # Just standard tests (127 tests)
+make test-errors         # Just error tests (15 tests)
 make test-tokenizer      # Just tokenizer tests (6 tests)
 ```
 
-**Current status**: ✅ 143/143 tests passing (100%)
+**Current status**: ✅ 148/148 tests passing (100%)
 
 ## Usage
 
@@ -289,7 +292,7 @@ Table-driven bytecode compiler (100% table-driven dispatch) that:
 
 ### 5. Virtual Machine (`vm.c`)
 
-Stack-based bytecode interpreter that executes:
+Stack-based bytecode interpreter with **tagged values** (matches industry standards like JVM, CLR, Lua, Python) that executes:
 
 - Arithmetic and logical operations
 - Variable access and assignment
@@ -299,7 +302,9 @@ Stack-based bytecode interpreter that executes:
 
 Manages:
 
-- Variable storage (numeric and string variables, arrays)\n- FOR/NEXT loop stack  
+- **Expression stack** (tagged values with runtime type checking)
+- Variable storage (numeric and string variables, arrays)
+- FOR/NEXT loop stack  
 - GOSUB/RETURN call stack
 - DATA statement read pointer
 

@@ -64,7 +64,7 @@ The implementation consists of several interconnected subsystems:
 - **Module**: `src/vm.c/h`
 - **Purpose**: Interprets and executes bytecode
 - **Architecture**:
-  - Dual stacks (numeric and string)
+  - **Tagged values**: Each stack entry includes a type tag (NUMBER/STRING) plus the data, allowing one stack to safely hold both numeric and string values
   - Variable storage (128 slots each for numeric/string)
   - Array support (1D/2D, numeric/string, DIM up to 32767)
   - FOR/NEXT loop stack (32 levels)
@@ -73,6 +73,7 @@ The implementation consists of several interconnected subsystems:
   - Trigonometric functions (DEG/RAD mode switching)
   - String manipulation (LEFT$, RIGHT$, MID$, concatenation)
   - Error handling with TRAP support
+  - Runtime type checking with "TYPE MISMATCH" errors
 
 ### 6. Bytecode File Format
 - **Module**: `src/bytecode_file.c/h`
@@ -171,8 +172,7 @@ Variables (0-127):  Numeric and string slots (128 each, limit enforced)
 Arrays:            Dynamic allocation on DIM (64 max, limit enforced)
 FOR Stack:         32 entries (loop contexts)
 GOSUB Stack:       64 entries (return addresses)
-Numeric Stack:     Dynamic growth
-String Stack:      Dynamic growth
+Stack:             Dynamic growth (tagged values)
 I/O Channels:      8 file handles
 ```
 

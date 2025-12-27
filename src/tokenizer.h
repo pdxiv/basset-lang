@@ -26,7 +26,6 @@ typedef struct {
 /* Tokenizer functions */
 void tokenizer_init(Tokenizer *tok, const char *input);
 void tokenizer_free(Tokenizer *tok);
-void tokenizer_refresh(Tokenizer *tok);  /* Refresh tokens after state restore */
 Token* tokenizer_next(Tokenizer *tok);
 Token* tokenizer_peek(Tokenizer *tok);
 const char* token_name(unsigned char type);

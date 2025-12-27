@@ -2,6 +2,7 @@
 #define _POSIX_C_SOURCE 200112L  /* Enable snprintf */
 #include "compiler.h"
 #include "tokenizer.h"
+#include "util.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -11,15 +12,6 @@
 #define MAX_NUMERIC_VARS 128
 #define MAX_STRING_VARS 128
 #define MAX_ARRAYS 64
-
-/* C89 compatible strdup (POSIX strdup not in C89 standard) */
-static char* my_strdup(const char *s) {
-    char *d;
-    if (!s) return NULL;
-    d = malloc(strlen(s) + 1);
-    if (d) strcpy(d, s);
-    return d;
-}
 
 /* Create new compiler state */
 CompilerState* compiler_state_new(void) {
@@ -172,7 +164,7 @@ int compiler_add_variable(CompilerState *cs, const char *name, VarType type) {
     }
     
     var = &cs->program->var_table[cs->program->var_count];
-    var->name = my_strdup(name);
+    var->name = basset_strdup(name);
     var->slot = cs->program->var_count;
     var->type = type;
     var->array_dim1 = 0;
@@ -222,7 +214,7 @@ uint16_t compiler_add_string(CompilerState *cs, const char *str) {
             sizeof(char*) * cs->program->string_capacity);
     }
     
-    cs->program->string_pool[cs->program->string_count] = my_strdup(str);
+    cs->program->string_pool[cs->program->string_count] = basset_strdup(str);
     return cs->program->string_count++;
 }
 
@@ -533,6 +525,9 @@ static void compile_expression(CompilerState *cs, ParseNode *expr) {
                 case TOK_CASC: compiler_emit_no_operand(cs, OP_STR_ASC); break;
                 case TOK_CSTR: compiler_emit_no_operand(cs, OP_STR_STR); break;
                 case TOK_CVAL: compiler_emit_no_operand(cs, OP_STR_VAL); break;
+                
+                /* System functions */
+                case TOK_CERR: compiler_emit_no_operand(cs, OP_FN_ERR); break;
                 
                 /* TAB function - special handling for PRINT */
                 case TOK_CTAB: compiler_emit_no_operand(cs, OP_TAB_FUNC); break;
@@ -1354,7 +1349,7 @@ static void extract_data_values_recursive(CompilerState *cs, ParseNode *node) {
                 cs->program->data_string_pool = realloc(cs->program->data_string_pool,
                     sizeof(char*) * cs->program->data_string_capacity);
             }
-            cs->program->data_string_pool[cs->program->data_string_count] = my_strdup(node->text);
+            cs->program->data_string_pool[cs->program->data_string_count] = basset_strdup(node->text);
             
             entry.type = DATA_STRING;
             entry.value.string_idx = cs->program->data_string_count++;
@@ -1365,7 +1360,7 @@ static void extract_data_values_recursive(CompilerState *cs, ParseNode *node) {
                 cs->program->data_string_pool = realloc(cs->program->data_string_pool,
                     sizeof(char*) * cs->program->data_string_capacity);
             }
-            cs->program->data_string_pool[cs->program->data_string_count] = my_strdup(node->text);
+            cs->program->data_string_pool[cs->program->data_string_count] = basset_strdup(node->text);
             
             entry.type = DATA_STRING;
             entry.value.string_idx = cs->program->data_string_count++;

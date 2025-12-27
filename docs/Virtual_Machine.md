@@ -2,15 +2,16 @@
 
 ## Overview
 
-The Basset BASIC Virtual Machine (VM) is a bytecode interpreter that executes compiled BASIC programs. It implements a stack-based architecture with separate numeric and string stacks, variable storage, array support, and control flow mechanisms.
+The Basset BASIC Virtual Machine (VM) is a bytecode interpreter that executes compiled BASIC programs. It implements a **stack-based architecture with tagged values**, variable storage, array support, and control flow mechanisms.
 
 ## Design Principles
 
-1. **Stack-Based**: Operations work on stacks rather than registers
-2. **Dual Stacks**: Separate stacks for numeric and string values
-3. **Type-Specific**: Distinct operations for numeric and string types
+1. **Stack-Based**: Operations work on a stack rather than registers
+2. **Tagged Values**: Each stack entry carries both a value and a type tag (NUMBER or STRING), allowing the single stack to safely hold different data types
+3. **Type Safety**: Runtime type checking with clear error messages
 4. **Fixed-Width Instructions**: All instructions are 4 bytes
 5. **Backward Compatibility**: Implements classic BASIC semantics faithfully
+6. **Industry Standard**: Architecture matches modern VMs (JVM, CLR, Lua, Python)
 
 ---
 
@@ -40,14 +41,10 @@ typedef struct {
     Array *num_arrays[128];      /* Numeric arrays */
     Array *str_arrays[128];      /* String arrays */
     
-    /* Stacks */
-    double *num_stack;           /* Numeric stack */
-    int num_stack_top;           /* Numeric stack pointer */
-    int num_stack_size;          /* Numeric stack capacity */
-    
-    char **str_stack;            /* String stack */
-    int str_stack_top;           /* String stack pointer */
-    int str_stack_size;          /* String stack capacity */
+    /* Expression Stack */
+    Value *stack;                /* Stack for numbers and strings */
+    int stack_top;               /* Stack pointer */
+    int stack_capacity;          /* Stack capacity */
     
     /* Control Flow */
     ForLoop for_stack[32];       /* FOR/NEXT loop contexts */
@@ -82,47 +79,69 @@ typedef struct {
 
 ## Stack Architecture
 
-### Numeric Stack
+### Expression Stack
 
-**Purpose**: Stores numeric values (double-precision floating-point) during expression evaluation.
+**Purpose**: Stack that holds both numeric and string values during expression evaluation using tagged values.
+
+**Value Type Definition:**
+```c
+typedef enum {
+    VAL_NUMBER,     /* Numeric value (double) */
+    VAL_STRING      /* String value (char*) */
+} ValueType;
+
+typedef struct {
+    ValueType type;
+    union {
+        double number;
+        char *string;
+    } data;
+} Value;
+```
 
 **Operations**:
-- **PUSH**: `num_stack[++num_stack_top] = value`
-- **POP**: `value = num_stack[num_stack_top--]`
-- **PEEK**: `value = num_stack[num_stack_top]` (no change to stack)
+- **PUSH**: `stack[stack_top++] = value` (with type tag)
+- **POP**: `value = stack[--stack_top]` (returns tagged value)
+- **PEEK**: `value = stack[stack_top - 1]` (no change to stack)
+
+**Type Safety:**
+- Helper functions (`vm_pop_number()`, `vm_pop_string()`) validate types
+- Raises "TYPE MISMATCH" error if wrong type extracted
+- Memory management: strings are heap-allocated and properly freed
 
 **Growth**: Dynamic allocation, expands as needed
 
 **Usage Examples**:
-- Expression: `X + Y * 2`
+- Numeric expression: `X + Y * 2`
   ```
-  PUSH X        → [X]
-  PUSH Y        → [X, Y]
-  PUSH 2        → [X, Y, 2]
-  MUL           → [X, Y*2]
-  ADD           → [X+Y*2]
+  PUSH_NUMBER X     → [{NUM, X}]
+  PUSH_NUMBER Y     → [{NUM, X}, {NUM, Y}]
+  PUSH_NUMBER 2     → [{NUM, X}, {NUM, Y}, {NUM, 2}]
+  MUL               → [{NUM, X}, {NUM, Y*2}]
+  ADD               → [{NUM, X+Y*2}]
   ```
 
-### String Stack
-
-**Purpose**: Stores string values during expression evaluation.
-
-**Operations**:
-- **PUSH**: `str_stack[++str_stack_top] = strdup(str)`
-- **POP**: `str = str_stack[str_stack_top--]`
-- **Memory**: Strings are heap-allocated; VM manages lifecycle
-
-**Growth**: Dynamic allocation, expands as needed
-
-**Usage Examples**:
-- Concatenation: `"HELLO" + " " + "WORLD"`
+- String concatenation: `"HELLO" + " " + "WORLD"`
   ```
-  PUSH "HELLO"       → ["HELLO"]
-  PUSH " "           → ["HELLO", " "]
-  CONCAT             → ["HELLO "]
-  PUSH "WORLD"       → ["HELLO ", "WORLD"]
-  CONCAT             → ["HELLO WORLD"]
+  PUSH_STRING "HELLO"  → [{STR, "HELLO"}]
+  PUSH_STRING " "      → [{STR, "HELLO"}, {STR, " "}]
+  CONCAT               → [{STR, "HELLO "}]
+  PUSH_STRING "WORLD"  → [{STR, "HELLO "}, {STR, "WORLD"}]
+  CONCAT               → [{STR, "HELLO WORLD"}]
   ```
+
+- Mixed operations (comparison returns number):
+  ```
+  PUSH_STRING "ABC"    → [{STR, "ABC"}]
+  PUSH_STRING "XYZ"    → [{STR, "ABC"}, {STR, "XYZ"}]
+  CMP_LT               → [{NUM, 1.0}]  (ABC < XYZ is true)
+  ```
+
+**Architecture Benefits:**
+- **Industry Standard:** Matches JVM, CLR, Lua, Python, JavaScript V8
+- **Simplified:** Single stack pointer, unified memory management
+- **Extensible:** Easy to add new value types (arrays, objects, etc.)
+- **Type Safe:** Runtime type checking with clear error messages
 
 ---
 
@@ -382,31 +401,119 @@ Common errors:
 
 ### TRAP Mechanism
 
-#### Setting Trap Handler
+The TRAP mechanism allows programs to intercept runtime errors and handle them gracefully instead of halting.
+
+#### VM State Fields
+```c
+int trap_enabled;        /* 1 if TRAP is active, 0 if disabled */
+int trap_line;           /* PC offset of trap handler line */
+int trap_triggered;      /* 1 if error occurred and trap was invoked */
 ```
+
+#### Setting Trap Handler
+```basic
 TRAP line_number
 ```
-- Sets `trap_line = line_number`
-- On error, jump to that line instead of halting
+- Sets `trap_enabled = 1`
+- Sets `trap_line` to PC offset of the target line
+- On error, execution jumps to that line instead of halting
 
 #### Disabling Trap
-```
+```basic
 TRAP 40000
 ```
+- Sets `trap_enabled = 0`
 - Sets `trap_line = -1`
-- Errors halt program
+- Errors will halt program with error message
+
+#### Trappable Errors
+All runtime errors can be trapped:
+- **Type mismatch** - Wrong type passed to operation (e.g., `LEN(42)`)
+- **Division by zero** - Divide or MOD by zero
+- **Array bounds** - Index out of range
+- **RETURN without GOSUB** - Return stack underflow
+- **NEXT without FOR** - FOR stack underflow
+- **FOR/NEXT mismatch** - Variable doesn't match
+- **File errors** - File not found, I/O errors
+- **DATA errors** - READ beyond available DATA items
+- **Invalid operation** - Invalid function arguments
 
 #### Error Handling Flow
 ```
-1. Error occurs during bytecode execution
-2. If trap_line >= 0:
-   a. Look up trap_line in line_map
-   b. Set pc to that address
-   c. Continue execution
-3. Else:
-   a. Print error message
-   b. Halt VM
+1. Error occurs during instruction execution (e.g., vm_pop_string() detects type mismatch)
+2. vm_error() is called with error message
+3. Error message is printed to stderr
+4. If trap_enabled && trap_line >= 0:
+   a. Set vm->pc = trap_line (jump to handler)
+   b. Set vm->trap_triggered = 1 (signal PC was changed)
+   c. Set vm->trap_enabled = 0 (disable to prevent infinite loop)
+   d. Return to instruction
+5. Else (no trap):
+   a. Set vm->running = 0 (halt program)
+   b. Return to instruction
 ```
+
+#### Instruction Trap Handling
+Instructions that can trigger errors must check `trap_triggered` after type-checking operations:
+
+```c
+case OP_STR_LEN:
+    char *str = vm_pop_string(vm);  // May call vm_error() if wrong type
+    if (vm->trap_triggered) break;   // Skip rest if error trapped
+    int len = strlen(str);
+    vm_push_number(vm, (double)len);
+    vm->pc++;
+    break;
+```
+
+Without this check, the instruction would continue executing and increment PC, skipping the first instruction of the trap handler.
+
+#### Re-enabling TRAP
+After handling an error, the trap handler can re-enable TRAP for subsequent errors:
+
+```basic
+10 REM Main program
+20 TRAP 1000
+30 X = LEN(42)          : REM Triggers trap
+40 PRINT "After trap"
+50 END
+
+1000 REM Error handler
+1010 PRINT "Error caught"
+1020 TRAP 1000           : REM Re-enable for next error
+1030 RETURN              : REM Or continue execution
+```
+
+#### Multiple TRAP Handlers
+Programs can chain different trap handlers for different error scenarios:
+
+```basic
+10 TRAP 200
+20 A = LEN(42)           : REM Type mismatch → TRAP 200
+30 PRINT "Test 1 passed"
+
+200 PRINT "Handler 1"
+210 TRAP 300             : REM Set new handler
+220 B = "X" + 5          : REM Type mismatch → TRAP 300
+230 PRINT "Test 2 passed"
+
+300 PRINT "Handler 2"
+310 PRINT "All tests passed"
+320 END
+```
+
+#### TRAP Behavior Details
+
+**Automatic Disable**: TRAP is automatically disabled after triggering to prevent infinite loops. If the trap handler itself causes an error without re-enabling TRAP, the program halts.
+
+**No Error Code**: Unlike some BASIC implementations, the VM doesn't expose error codes to the BASIC program. Trap handlers must infer the error type from context or error message output.
+
+**Error Messages**: All errors print descriptive messages to stderr before invoking the trap handler, even when trapped. This aids debugging.
+
+**Control Flow**: After handling an error, the trap handler can:
+- **END** - Terminate program gracefully
+- **GOTO line** - Continue execution elsewhere
+- **RETURN** - Only if trap was called from within a GOSUB context
 
 ---
 
@@ -504,18 +611,18 @@ int deg_mode;    /* 1 = degrees, 0 = radians */
 - **Allocation**: All strings dynamically allocated with `strdup()` or `malloc()`
 - **Deallocation**: VM frees strings when:
   - String variable reassigned
-  - String stack entry popped and not saved
+  - Stack entry popped and not saved to a variable
   - Array deallocated
   - VM shutdown
 
 ### Automatic Cleanup
 - **Variables**: Freed on `OP_CLR` or VM shutdown
 - **Arrays**: Freed on `OP_CLR` or VM shutdown
-- **Stacks**: Freed on VM shutdown
+- **Stack**: Freed on VM shutdown
 
 ### Leak Prevention
 - Every `strdup()` has corresponding `free()`
-- String stack manages ownership carefully
+- Stack manages string ownership carefully
 - Array DIM checks for existing array and frees it
 
 ---
@@ -579,7 +686,7 @@ Execute main loop until program ends or error
 
 ### State Inspection
 - **Variables**: Can inspect all 128 slots
-- **Stacks**: Can dump numeric and string stack contents
+- **Stack**: Can dump stack contents (shows tagged values)
 - **PC**: Current instruction address
 - **Line Map**: Translate PC to source line number
 

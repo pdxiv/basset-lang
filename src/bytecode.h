@@ -54,6 +54,7 @@ typedef struct {
 #define OP_STR_RIGHT    0x38
 #define OP_STR_MID      0x39
 #define OP_STR_MID_2    0x3A  /* MID$ with 2 args (no length) */
+#define OP_FN_ERR       0x3B  /* ERR - returns last error code */
 
 /* Array Operations */
 #define OP_ARRAY_GET_1D 0x40

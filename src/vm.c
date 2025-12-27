@@ -1,6 +1,7 @@
 /* vm.c - Virtual machine executor */
 #define _POSIX_C_SOURCE 200112L  /* Enable snprintf */
 #include "vm.h"
+#include "util.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -10,15 +11,6 @@
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
-
-/* C89 compatible strdup (POSIX strdup not in C89 standard) */
-static char* my_strdup(const char *s) {
-    char *d;
-    if (!s) return NULL;
-    d = malloc(strlen(s) + 1);
-    if (d) strcpy(d, s);
-    return d;
-}
 
 /* Validate numeric input string */
 static int is_valid_numeric_input(const char *str) {
@@ -63,14 +55,10 @@ VMState* vm_init(CompiledProgram *program) {
     vm = calloc(1, sizeof(VMState));
     if (!vm) return NULL;
     
-    /* Initialize stacks */
+    /* Initialize stack */
     vm->stack_capacity = 256;
-    vm->stack = malloc(sizeof(double) * vm->stack_capacity);
+    vm->stack = malloc(sizeof(Value) * vm->stack_capacity);
     vm->stack_top = 0;
-    
-    vm->str_stack_capacity = 256;
-    vm->str_stack = malloc(sizeof(char*) * vm->str_stack_capacity);
-    vm->str_stack_top = 0;
     
     vm->call_capacity = 64;
     vm->call_stack = malloc(sizeof(uint32_t) * vm->call_capacity);
@@ -88,7 +76,7 @@ VMState* vm_init(CompiledProgram *program) {
     
     /* Initialize string variables and array flags */
     for (i = 0; i < vm->var_capacity; i++) {
-        vm->str_vars[i] = my_strdup("");
+        vm->str_vars[i] = basset_strdup("");
         /* Set is_string flag for arrays based on variable type */
         if (program->var_table[i].type == VAR_STRING ||
             (program->var_table[i].name && strchr(program->var_table[i].name, '$'))) {
@@ -112,6 +100,7 @@ VMState* vm_init(CompiledProgram *program) {
     vm->trap_line = 0;
     vm->trap_enabled = 0;
     vm->trap_triggered = 0;
+    vm->error_code = ERR_NONE;
     vm->print_needs_newline = 0;
     vm->print_last_char = '\0';
     vm->print_after_tab = 0;
@@ -133,7 +122,6 @@ VMState* vm_init(CompiledProgram *program) {
     vm->memory = calloc(65536, 1);
     if (!vm->memory) {
         free(vm->stack);
-        free(vm->str_stack);
         free(vm->call_stack);
         free(vm->for_stack);
         free(vm->num_vars);
@@ -154,13 +142,14 @@ void vm_free(VMState *vm) {
     
     if (!vm) return;
     
-    if (vm->stack) free(vm->stack);
-    
-    if (vm->str_stack) {
-        for (i = 0; i < vm->str_stack_top; i++) {
-            if (vm->str_stack[i]) free(vm->str_stack[i]);
+    /* Free strings on the stack */
+    if (vm->stack) {
+        for (i = 0; i < vm->stack_top; i++) {
+            if (vm->stack[i].type == VAL_STRING && vm->stack[i].data.string) {
+                free(vm->stack[i].data.string);
+            }
         }
-        free(vm->str_stack);
+        free(vm->stack);
     }
     
     if (vm->call_stack) free(vm->call_stack);
@@ -208,36 +197,54 @@ void vm_free(VMState *vm) {
 }
 
 /* Stack operations */
-void vm_push(VMState *vm, double value) {
+/* Stack operations */
+void vm_push(VMState *vm, Value value) {
     if (vm->stack_top >= vm->stack_capacity) {
         vm->stack_capacity *= 2;
-        vm->stack = realloc(vm->stack, sizeof(double) * vm->stack_capacity);
+        vm->stack = realloc(vm->stack, sizeof(Value) * vm->stack_capacity);
     }
     vm->stack[vm->stack_top++] = value;
 }
 
-double vm_pop(VMState *vm) {
+Value vm_pop(VMState *vm) {
     if (vm->stack_top == 0) {
-        vm_error(vm, "STACK UNDERFLOW");
-        return 0.0;
+        vm_error(vm, ERR_OVERFLOW, "STACK UNDERFLOW");
+        return value_number(0.0);
     }
     return vm->stack[--vm->stack_top];
 }
 
-void vm_str_push(VMState *vm, const char *str) {
-    if (vm->str_stack_top >= vm->str_stack_capacity) {
-        vm->str_stack_capacity *= 2;
-        vm->str_stack = realloc(vm->str_stack, sizeof(char*) * vm->str_stack_capacity);
-    }
-    vm->str_stack[vm->str_stack_top++] = my_strdup(str ? str : "");
+/* Helper: push number */
+void vm_push_number(VMState *vm, double n) {
+    vm_push(vm, value_number(n));
 }
 
-char* vm_str_pop(VMState *vm) {
-    if (vm->str_stack_top == 0) {
-        vm_error(vm, "STRING STACK UNDERFLOW");
-        return my_strdup("");
+/* Helper: push string (takes ownership) */
+void vm_push_string(VMState *vm, char *s) {
+    vm_push(vm, value_string(s));
+}
+
+/* Helper: pop and expect number */
+double vm_pop_number(VMState *vm) {
+    Value v = vm_pop(vm);
+    if (v.type != VAL_NUMBER) {
+        vm_error(vm, ERR_TYPE_MISMATCH, "TYPE MISMATCH - expected number");
+        if (v.type == VAL_STRING && v.data.string) {
+            free(v.data.string);
+        }
+        return 0.0;
     }
-    return vm->str_stack[--vm->str_stack_top];
+    return v.data.number;
+}
+
+/* Helper: pop and expect string */
+char* vm_pop_string(VMState *vm) {
+    Value v = vm_pop(vm);
+    if (v.type != VAL_STRING) {
+        vm_error(vm, ERR_TYPE_MISMATCH, "TYPE MISMATCH - expected string");
+        return basset_strdup("");
+    }
+    return v.data.string;  /* Caller takes ownership */
 }
 
 /* Call stack operations */
@@ -251,7 +258,7 @@ void vm_call_push(VMState *vm, uint32_t return_addr) {
 
 uint32_t vm_call_pop(VMState *vm) {
     if (vm->call_top == 0) {
-        vm_error(vm, "RETURN WITHOUT GOSUB");
+        vm_error(vm, ERR_RETURN_WITHOUT_GOSUB, "RETURN WITHOUT GOSUB");
         return 0;
     }
     return vm->call_stack[--vm->call_top];
@@ -268,7 +275,7 @@ void vm_for_push(VMState *vm, ForLoopState state) {
 
 ForLoopState* vm_for_top(VMState *vm) {
     if (vm->for_top == 0) {
-        vm_error(vm, "NEXT WITHOUT FOR");
+        vm_error(vm, ERR_NEXT_WITHOUT_FOR, "NEXT WITHOUT FOR");
         return NULL;
     }
     return &vm->for_stack[vm->for_top - 1];
@@ -406,12 +413,21 @@ static char* get_next_input_value(VMState *vm) {
 }
 
 /* Error handling */
-void vm_error(VMState *vm, const char *message) {
+void vm_error(VMState *vm, int error_code, const char *message) {
+    int i;
+    
+    /* Store error code for ERR function */
+    vm->error_code = error_code;
+    
     /* Check if TRAP is enabled */
     if (vm->trap_enabled && vm->trap_line > 0) {
-        /* Clear stacks to avoid corruption */
+        /* Clear stacks to avoid corruption - free strings on stack */
+        for (i = 0; i < vm->stack_top; i++) {
+            if (vm->stack[i].type == VAL_STRING && vm->stack[i].data.string) {
+                free(vm->stack[i].data.string);
+            }
+        }
         vm->stack_top = 0;
-        vm->str_stack_top = 0;
         
         /* Jump to trap handler instead of halting */
         vm->pc = vm->trap_line;
@@ -462,14 +478,14 @@ void vm_execute(VMState *vm) {
             /* Stack Operations */
             case OP_PUSH_CONST: {
                 double value = vm->program->const_pool[inst.operand];
-                vm_push(vm, value);
+                vm_push_number(vm, value);
                 vm->pc++;
                 break;
             }
             
             case OP_PUSH_VAR: {
                 double value = vm->num_vars[inst.operand];
-                vm_push(vm, value);
+                vm_push_number(vm, value);
                 vm->pc++;
                 break;
             }
@@ -477,245 +493,265 @@ void vm_execute(VMState *vm) {
             case OP_STR_PUSH_VAR: {
                 const char *str = vm->str_vars[inst.operand];
                 if (str) {
-                    vm_str_push(vm, str);
+                    vm_push_string(vm, basset_strdup(str));
                 } else {
-                    vm_str_push(vm, "");
+                    vm_push_string(vm, basset_strdup(""));
                 }
                 vm->pc++;
                 break;
             }
             
             case OP_POP_VAR: {
-                double value = vm_pop(vm);
+                double value = vm_pop_number(vm);
                 vm->num_vars[inst.operand] = value;
                 vm->pc++;
                 break;
             }
             
             case OP_STR_POP_VAR: {
-                const char *str = vm_str_pop(vm);
+                char *str = vm_pop_string(vm);
                 if (vm->str_vars[inst.operand]) {
                     free(vm->str_vars[inst.operand]);
                 }
-                vm->str_vars[inst.operand] = my_strdup(str);
+                vm->str_vars[inst.operand] = str;
                 vm->pc++;
                 break;
             }
             
             case OP_DUP: {
                 if (vm->stack_top > 0) {
-                    double value = vm->stack[vm->stack_top - 1];
-                    vm_push(vm, value);
+                    Value value = vm->stack[vm->stack_top - 1];
+                    /* Deep copy strings */
+                    if (value.type == VAL_STRING) {
+                        vm_push_string(vm, basset_strdup(value.data.string));
+                    } else {
+                        vm_push(vm, value);
+                    }
                 }
                 vm->pc++;
                 break;
             }
             
             case OP_POP: {
-                vm_pop(vm);
+                Value val = vm_pop(vm);
+                if (val.type == VAL_STRING) {
+                    free(val.data.string);
+                }
                 vm->pc++;
                 break;
             }
             
             /* Arithmetic Operations */
             case OP_ADD: {
-                double b = vm_pop(vm);
-                double a = vm_pop(vm);
-                vm_push(vm, a + b);
+                double a, b;
+                b = vm_pop_number(vm);
+                if (vm->trap_triggered) break;
+                a = vm_pop_number(vm);
+                if (vm->trap_triggered) break;
+                vm_push_number(vm, a + b);
                 vm->pc++;
                 break;
             }
             
             case OP_SUB: {
-                double b = vm_pop(vm);
-                double a = vm_pop(vm);
-                vm_push(vm, a - b);
+                double a, b;
+                b = vm_pop_number(vm);
+                if (vm->trap_triggered) break;
+                a = vm_pop_number(vm);
+                if (vm->trap_triggered) break;
+                vm_push_number(vm, a - b);
                 vm->pc++;
                 break;
             }
             
             case OP_MUL: {
-                double b = vm_pop(vm);
-                double a = vm_pop(vm);
-                vm_push(vm, a * b);
+                double a, b;
+                b = vm_pop_number(vm);
+                if (vm->trap_triggered) break;
+                a = vm_pop_number(vm);
+                if (vm->trap_triggered) break;
+                vm_push_number(vm, a * b);
                 vm->pc++;
                 break;
             }
             
             case OP_DIV: {
-                double b = vm_pop(vm);
-                double a = vm_pop(vm);
+                double b = vm_pop_number(vm);
+                double a = vm_pop_number(vm);
                 if (b == 0.0) {
-                    vm_error(vm, "DIVISION BY ZERO");
+                    vm_error(vm, ERR_DIVISION_BY_ZERO, "DIVISION BY ZERO");
                     if (vm->trap_triggered) {
                         vm->trap_triggered = 0;
                         break;  /* Don't increment pc, trap handler set it */
                     }
                 } else {
-                    vm_push(vm, a / b);
+                    vm_push_number(vm, a / b);
                 }
                 vm->pc++;
                 break;
             }
             
             case OP_MOD: {
-                double b = vm_pop(vm);
-                double a = vm_pop(vm);
-                vm_push(vm, fmod(a, b));
+                double a, b;
+                b = vm_pop_number(vm);
+                if (vm->trap_triggered) break;
+                a = vm_pop_number(vm);
+                if (vm->trap_triggered) break;
+                vm_push_number(vm, fmod(a, b));
                 vm->pc++;
                 break;
             }
             
             case OP_POW: {
-                double b = vm_pop(vm);
-                double a = vm_pop(vm);
-                vm_push(vm, pow(a, b));
+                double b = vm_pop_number(vm);
+                double a = vm_pop_number(vm);
+                vm_push_number(vm, pow(a, b));
                 vm->pc++;
                 break;
             }
             
             case OP_NEG: {
-                double a = vm_pop(vm);
-                vm_push(vm, -a);
+                double a = vm_pop_number(vm);
+                vm_push_number(vm, -a);
                 vm->pc++;
                 break;
             }
             
             /* Comparison Operations */
             case OP_EQ: {
-                /* Check if we have strings on string stack */
-                if (vm->str_stack_top >= 2) {
-                    char *b = vm_str_pop(vm);
-                    char *a = vm_str_pop(vm);
-                    int result = (strcmp(a, b) == 0) ? 1 : 0;
-                    free(a);
-                    free(b);
-                    vm_push(vm, (double)result);
+                Value b = vm_pop(vm);
+                Value a = vm_pop(vm);
+                int result;
+                if (a.type != b.type) {
+                    vm_error(vm, ERR_TYPE_MISMATCH, "TYPE MISMATCH");
+                    result = 0;
+                } else if (a.type == VAL_STRING) {
+                    result = (strcmp(a.data.string, b.data.string) == 0) ? 1 : 0;
+                    free(a.data.string);
+                    free(b.data.string);
                 } else {
-                    /* Numeric comparison */
-                    double b = vm_pop(vm);
-                    double a = vm_pop(vm);
-                    vm_push(vm, (a == b) ? 1.0 : 0.0);
+                    result = (a.data.number == b.data.number) ? 1 : 0;
                 }
+                vm_push_number(vm, (double)result);
                 vm->pc++;
                 break;
             }
             
             case OP_NE: {
-                /* Check if we have strings on string stack */
-                if (vm->str_stack_top >= 2) {
-                    char *b = vm_str_pop(vm);
-                    char *a = vm_str_pop(vm);
-                    int result = (strcmp(a, b) != 0) ? 1 : 0;
-                    free(a);
-                    free(b);
-                    vm_push(vm, (double)result);
+                Value b = vm_pop(vm);
+                Value a = vm_pop(vm);
+                int result;
+                if (a.type != b.type) {
+                    vm_error(vm, ERR_TYPE_MISMATCH, "TYPE MISMATCH");
+                    result = 1;
+                } else if (a.type == VAL_STRING) {
+                    result = (strcmp(a.data.string, b.data.string) != 0) ? 1 : 0;
+                    free(a.data.string);
+                    free(b.data.string);
                 } else {
-                    /* Numeric comparison */
-                    double b = vm_pop(vm);
-                    double a = vm_pop(vm);
-                    vm_push(vm, (a != b) ? 1.0 : 0.0);
+                    result = (a.data.number != b.data.number) ? 1 : 0;
                 }
+                vm_push_number(vm, (double)result);
                 vm->pc++;
                 break;
             }
             
             case OP_LT: {
-                /* Check if we have strings on string stack */
-                if (vm->str_stack_top >= 2) {
-                    char *b = vm_str_pop(vm);
-                    char *a = vm_str_pop(vm);
-                    int result = (strcmp(a, b) < 0) ? 1 : 0;
-                    free(a);
-                    free(b);
-                    vm_push(vm, (double)result);
+                Value b = vm_pop(vm);
+                Value a = vm_pop(vm);
+                int result;
+                if (a.type != b.type) {
+                    vm_error(vm, ERR_TYPE_MISMATCH, "TYPE MISMATCH");
+                    result = 0;
+                } else if (a.type == VAL_STRING) {
+                    result = (strcmp(a.data.string, b.data.string) < 0) ? 1 : 0;
+                    free(a.data.string);
+                    free(b.data.string);
                 } else {
-                    /* Numeric comparison */
-                    double b = vm_pop(vm);
-                    double a = vm_pop(vm);
-                    vm_push(vm, (a < b) ? 1.0 : 0.0);
+                    result = (a.data.number < b.data.number) ? 1 : 0;
                 }
+                vm_push_number(vm, (double)result);
                 vm->pc++;
                 break;
             }
             
             case OP_LE: {
-                /* Check if we have strings on string stack */
-                if (vm->str_stack_top >= 2) {
-                    char *b = vm_str_pop(vm);
-                    char *a = vm_str_pop(vm);
-                    int result = (strcmp(a, b) <= 0) ? 1 : 0;
-                    free(a);
-                    free(b);
-                    vm_push(vm, (double)result);
+                Value b = vm_pop(vm);
+                Value a = vm_pop(vm);
+                int result;
+                if (a.type != b.type) {
+                    vm_error(vm, ERR_TYPE_MISMATCH, "TYPE MISMATCH");
+                    result = 0;
+                } else if (a.type == VAL_STRING) {
+                    result = (strcmp(a.data.string, b.data.string) <= 0) ? 1 : 0;
+                    free(a.data.string);
+                    free(b.data.string);
                 } else {
-                    /* Numeric comparison */
-                    double b = vm_pop(vm);
-                    double a = vm_pop(vm);
-                    vm_push(vm, (a <= b) ? 1.0 : 0.0);
+                    result = (a.data.number <= b.data.number) ? 1 : 0;
                 }
+                vm_push_number(vm, (double)result);
                 vm->pc++;
                 break;
             }
             
             case OP_GT: {
-                /* Check if we have strings on string stack */
-                if (vm->str_stack_top >= 2) {
-                    char *b = vm_str_pop(vm);
-                    char *a = vm_str_pop(vm);
-                    int result = (strcmp(a, b) > 0) ? 1 : 0;
-                    free(a);
-                    free(b);
-                    vm_push(vm, (double)result);
+                Value b = vm_pop(vm);
+                Value a = vm_pop(vm);
+                int result;
+                if (a.type != b.type) {
+                    vm_error(vm, ERR_TYPE_MISMATCH, "TYPE MISMATCH");
+                    result = 0;
+                } else if (a.type == VAL_STRING) {
+                    result = (strcmp(a.data.string, b.data.string) > 0) ? 1 : 0;
+                    free(a.data.string);
+                    free(b.data.string);
                 } else {
-                    /* Numeric comparison */
-                    double b = vm_pop(vm);
-                    double a = vm_pop(vm);
-                    vm_push(vm, (a > b) ? 1.0 : 0.0);
+                    result = (a.data.number > b.data.number) ? 1 : 0;
                 }
+                vm_push_number(vm, (double)result);
                 vm->pc++;
                 break;
             }
             
             case OP_GE: {
-                /* Check if we have strings on string stack */
-                if (vm->str_stack_top >= 2) {
-                    char *b = vm_str_pop(vm);
-                    char *a = vm_str_pop(vm);
-                    int result = (strcmp(a, b) >= 0) ? 1 : 0;
-                    free(a);
-                    free(b);
-                    vm_push(vm, (double)result);
+                Value b = vm_pop(vm);
+                Value a = vm_pop(vm);
+                int result;
+                if (a.type != b.type) {
+                    vm_error(vm, ERR_TYPE_MISMATCH, "TYPE MISMATCH");
+                    result = 0;
+                } else if (a.type == VAL_STRING) {
+                    result = (strcmp(a.data.string, b.data.string) >= 0) ? 1 : 0;
+                    free(a.data.string);
+                    free(b.data.string);
                 } else {
-                    /* Numeric comparison */
-                    double b = vm_pop(vm);
-                    double a = vm_pop(vm);
-                    vm_push(vm, (a >= b) ? 1.0 : 0.0);
+                    result = (a.data.number >= b.data.number) ? 1 : 0;
                 }
+                vm_push_number(vm, (double)result);
                 vm->pc++;
                 break;
             }
             
             /* Logical Operations */
             case OP_AND: {
-                double b = vm_pop(vm);
-                double a = vm_pop(vm);
-                vm_push(vm, (a != 0.0 && b != 0.0) ? 1.0 : 0.0);
+                double b = vm_pop_number(vm);
+                double a = vm_pop_number(vm);
+                vm_push_number(vm, (a != 0.0 && b != 0.0) ? 1.0 : 0.0);
                 vm->pc++;
                 break;
             }
             
             case OP_OR: {
-                double b = vm_pop(vm);
-                double a = vm_pop(vm);
-                vm_push(vm, (a != 0.0 || b != 0.0) ? 1.0 : 0.0);
+                double b = vm_pop_number(vm);
+                double a = vm_pop_number(vm);
+                vm_push_number(vm, (a != 0.0 || b != 0.0) ? 1.0 : 0.0);
                 vm->pc++;
                 break;
             }
             
             case OP_NOT: {
-                double a = vm_pop(vm);
-                vm_push(vm, (a == 0.0) ? 1.0 : 0.0);
+                double a = vm_pop_number(vm);
+                vm_push_number(vm, (a == 0.0) ? 1.0 : 0.0);
                 vm->pc++;
                 break;
             }
@@ -723,42 +759,57 @@ void vm_execute(VMState *vm) {
             /* String Operations */
             case OP_STR_PUSH: {
                 const char *str = vm->program->string_pool[inst.operand];
-                vm_str_push(vm, str);
+                vm_push_string(vm, basset_strdup(str));
                 vm->pc++;
                 break;
             }
             
             case OP_STR_LEFT: {
                 /* LEFT$(str, len) - pops len, then str */
-                double len_d = vm_pop(vm);
-                const char *str = vm_str_pop(vm);
-                int len = (int)len_d;
-                char *result = malloc(len + 1);
+                double len_d;
+                char *str;
+                int len;
+                char *result;
                 int i;
                 
+                len_d = vm_pop_number(vm);
+                str = vm_pop_string(vm);
+                if (vm->trap_triggered) break;  /* Error occurred */
+                len = (int)len_d;
+                
                 if (len < 0) len = 0;
+                result = malloc(len + 1);
                 for (i = 0; i < len && str[i]; i++) {
                     result[i] = str[i];
                 }
                 result[i] = '\0';
-                vm_str_push(vm, result);
-                free(result);
+                vm_push_string(vm, result);
+                free(str);
                 vm->pc++;
                 break;
             }
             
             case OP_STR_RIGHT: {
                 /* RIGHT$(str, len) - pops len, then str */
-                double len_d = vm_pop(vm);
-                const char *str = vm_str_pop(vm);
-                int len = (int)len_d;
-                int str_len = strlen(str);
+                double len_d;
+                char *str;
+                int len;
+                int str_len;
                 int start;
+                char *result;
+                
+                len_d = vm_pop_number(vm);
+                str = vm_pop_string(vm);
+                if (vm->trap_triggered) break;  /* Error occurred */
+                len = (int)len_d;
+                str_len = strlen(str);
                 
                 if (len < 0) len = 0;
                 if (len > str_len) len = str_len;
                 start = str_len - len;
-                vm_str_push(vm, str + start);
+                result = basset_strdup(str + start);
+                vm_push_string(vm, result);
+                free(str);
                 vm->pc++;
                 break;
             }
@@ -766,20 +817,29 @@ void vm_execute(VMState *vm) {
             case OP_STR_MID: {
                 /* MID$(str, start, len) - pops len, start, then str */
                 /* If len is missing (only 2 args), it's treated as rest of string */
-                double len_d = vm_pop(vm);
-                double start_d = vm_pop(vm);
-                const char *str = vm_str_pop(vm);
-                int start = (int)start_d;
-                int len = (int)len_d;
-                int str_len = strlen(str);
+                double len_d;
+                double start_d;
+                char *str;
+                int start;
+                int len;
+                int str_len;
                 char *result;
                 int i;
+                
+                len_d = vm_pop_number(vm);
+                start_d = vm_pop_number(vm);
+                str = vm_pop_string(vm);
+                if (vm->trap_triggered) break;  /* Error occurred */
+                start = (int)start_d;
+                len = (int)len_d;
+                str_len = strlen(str);
                 
                 /* Classic BASIC uses 1-based string indexing */
                 start--;
                 if (start < 0) start = 0;
                 if (start >= str_len) {
-                    vm_str_push(vm, "");
+                    vm_push_string(vm, basset_strdup(""));
+                    free(str);
                     vm->pc++;
                     break;
                 }
@@ -793,16 +853,16 @@ void vm_execute(VMState *vm) {
                     result[i] = str[start + i];
                 }
                 result[i] = '\0';
-                vm_str_push(vm, result);
-                free(result);
+                vm_push_string(vm, result);
+                free(str);
                 vm->pc++;
                 break;
             }
             
             case OP_STR_MID_2: {
                 /* MID$(str, start) - 2 args, return from start to end */
-                double start_d = vm_pop(vm);
-                const char *str = vm_str_pop(vm);
+                double start_d = vm_pop_number(vm);
+                char *str = vm_pop_string(vm);
                 int start = (int)start_d;
                 int str_len = strlen(str);
                 char *result;
@@ -813,7 +873,8 @@ void vm_execute(VMState *vm) {
                 start--;
                 if (start < 0) start = 0;
                 if (start >= str_len) {
-                    vm_str_push(vm, "");
+                    vm_push_string(vm, basset_strdup(""));
+                    free(str);
                     vm->pc++;
                     break;
                 }
@@ -825,51 +886,74 @@ void vm_execute(VMState *vm) {
                     result[i] = str[start + i];
                 }
                 result[i] = '\0';
-                vm_str_push(vm, result);
-                free(result);
+                vm_push_string(vm, result);
+                free(str);
                 vm->pc++;
                 break;
             }
             
             case OP_STR_LEN: {
-                const char *str = vm_str_pop(vm);
-                double len = (double)strlen(str);
-                vm_push(vm, len);
+                char *str;
+                double len;
+                
+                str = vm_pop_string(vm);
+                if (vm->trap_triggered) break;  /* Error occurred, TRAP handler set PC */
+                len = (double)strlen(str);
+                free(str);
+                vm_push_number(vm, len);
                 vm->pc++;
                 break;
             }
             
             case OP_STR_CHR: {
-                double code = vm_pop(vm);
+                double code = vm_pop_number(vm);
                 char result[2];
                 result[0] = (char)(int)code;
                 result[1] = '\0';
-                vm_str_push(vm, result);
+                vm_push_string(vm, basset_strdup(result));
                 vm->pc++;
                 break;
             }
             
             case OP_STR_ASC: {
-                const char *str = vm_str_pop(vm);
-                double code = str[0] ? (double)(unsigned char)str[0] : 0.0;
-                vm_push(vm, code);
+                char *str;
+                double code;
+                
+                str = vm_pop_string(vm);
+                if (vm->trap_triggered) break;  /* Error occurred */
+                code = str[0] ? (double)(unsigned char)str[0] : 0.0;
+                free(str);
+                vm_push_number(vm, code);
                 vm->pc++;
                 break;
             }
             
             case OP_STR_STR: {
-                double value = vm_pop(vm);
+                double value = vm_pop_number(vm);
                 char buffer[64];
                 sprintf(buffer, "%g", value);
-                vm_str_push(vm, buffer);
+                vm_push_string(vm, basset_strdup(buffer));
                 vm->pc++;
                 break;
             }
             
             case OP_STR_VAL: {
-                const char *str = vm_str_pop(vm);
-                double value = atof(str);
-                vm_push(vm, value);
+                char *str;
+                double value;
+                
+                str = vm_pop_string(vm);
+                if (vm->trap_triggered) break;  /* Error occurred */
+                value = atof(str);
+                free(str);
+                vm_push_number(vm, value);
+                vm->pc++;
+                break;
+            }
+            
+            /* System Functions */
+            case OP_FN_ERR: {
+                /* Return the last error code */
+                vm_push_number(vm, (double)vm->error_code);
                 vm->pc++;
                 break;
             }
@@ -881,7 +965,7 @@ void vm_execute(VMState *vm) {
             }
             
             case OP_JUMP_IF_FALSE: {
-                double cond = vm_pop(vm);
+                double cond = vm_pop_number(vm);
                 if (cond == 0.0) {
                     vm->pc = inst.operand;
                 } else {
@@ -891,7 +975,7 @@ void vm_execute(VMState *vm) {
             }
             
             case OP_JUMP_IF_TRUE: {
-                double cond = vm_pop(vm);
+                double cond = vm_pop_number(vm);
                 if (cond != 0.0) {
                     vm->pc = inst.operand;
                 } else {
@@ -901,12 +985,12 @@ void vm_execute(VMState *vm) {
             }
             
             case OP_JUMP_LINE: {
-                double line_d = vm_pop(vm);
+                double line_d = vm_pop_number(vm);
                 uint16_t line = (uint16_t)line_d;
                 int32_t offset = vm_find_line_offset(vm, line);
                 
                 if (offset < 0) {
-                    vm_error(vm, "UNDEF'D STATEMENT");
+                    vm_error(vm, ERR_UNDEFINED_LINE, "UNDEF'D STATEMENT");
                 } else {
                     vm->pc = offset;
                 }
@@ -920,12 +1004,12 @@ void vm_execute(VMState *vm) {
             }
             
             case OP_GOSUB_LINE: {
-                double line_d = vm_pop(vm);
+                double line_d = vm_pop_number(vm);
                 uint16_t line = (uint16_t)line_d;
                 int32_t offset = vm_find_line_offset(vm, line);
                 
                 if (offset < 0) {
-                    vm_error(vm, "UNDEF'D STATEMENT");
+                    vm_error(vm, ERR_UNDEFINED_LINE, "UNDEF'D STATEMENT");
                 } else {
                     vm_call_push(vm, vm->pc + 1);
                     vm->pc = offset;
@@ -934,7 +1018,7 @@ void vm_execute(VMState *vm) {
             }
             
             case OP_ON_GOTO: {
-                double index_d = vm_pop(vm);
+                double index_d = vm_pop_number(vm);
                 int index = (int)index_d;
                 uint16_t count = inst.operand;
                 
@@ -951,7 +1035,7 @@ void vm_execute(VMState *vm) {
             }
             
             case OP_ON_GOSUB: {
-                double index_d = vm_pop(vm);
+                double index_d = vm_pop_number(vm);
                 int index = (int)index_d;
                 uint16_t count = inst.operand;
                 
@@ -978,9 +1062,9 @@ void vm_execute(VMState *vm) {
                 ForLoopState state;
                 double step, limit, start;
                 
-                step = vm_pop(vm);
-                limit = vm_pop(vm);
-                start = vm_pop(vm);
+                step = vm_pop_number(vm);
+                limit = vm_pop_number(vm);
+                start = vm_pop_number(vm);
                 
                 state.step = step;
                 state.limit = limit;
@@ -1012,7 +1096,7 @@ void vm_execute(VMState *vm) {
                                 "NEXT variable mismatch: expected %s, got %s",
                                 vm_get_var_name(vm, loop->var_slot),
                                 vm_get_var_name(vm, inst.operand));
-                        vm_error(vm, err_msg);
+                        vm_error(vm, ERR_FOR_NEXT_MISMATCH, err_msg);
                         break;
                     }
                     var_slot = inst.operand;
@@ -1042,7 +1126,7 @@ void vm_execute(VMState *vm) {
             /* I/O Operations */
             case OP_SET_PRINT_CHANNEL: {
                 /* Pop channel number from stack and set as current print channel */
-                double chan_val = vm_pop(vm);
+                double chan_val = vm_pop_number(vm);
                 int chan = (int)chan_val;
                 
                 /* Validate channel (0 = stdout, 1-7 = file channels) */
@@ -1057,7 +1141,7 @@ void vm_execute(VMState *vm) {
             }
             
             case OP_PRINT_NUM: {
-                double value = vm_pop(vm);
+                double value = vm_pop_number(vm);
                 char buffer[32];
                 size_t len;
                 FILE *out = vm_get_output_file(vm);
@@ -1098,7 +1182,7 @@ void vm_execute(VMState *vm) {
             }
             
             case OP_PRINT_STR: {
-                char *str = vm_str_pop(vm);
+                char *str = vm_pop_string(vm);
                 size_t len = strlen(str);
                 FILE *out = vm_get_output_file(vm);
                 
@@ -1153,7 +1237,7 @@ void vm_execute(VMState *vm) {
             
             case OP_TAB_FUNC: {
                 /* TAB(n) function - move cursor to column n */
-                double target_col_d = vm_pop(vm);
+                double target_col_d = vm_pop_number(vm);
                 int target_col = (int)target_col_d;
                 FILE *out = vm_get_output_file(vm);
                 int spaces_needed;
@@ -1235,7 +1319,7 @@ void vm_execute(VMState *vm) {
                 if (vm->str_vars[inst.operand]) {
                     free(vm->str_vars[inst.operand]);
                 }
-                vm->str_vars[inst.operand] = my_strdup(value_str);
+                vm->str_vars[inst.operand] = basset_strdup(value_str);
                 
                 vm->pc++;
                 break;
@@ -1249,14 +1333,14 @@ void vm_execute(VMState *vm) {
                 double channel;
                 int chan;
                 
-                filename = vm_str_pop(vm);
-                (void)vm_pop(vm);  /* aux parameter (unused) */
-                mode = vm_pop(vm);
-                channel = vm_pop(vm);
+                filename = vm_pop_string(vm);
+                (void)vm_pop_number(vm);  /* aux parameter (unused) */
+                mode = vm_pop_number(vm);
+                channel = vm_pop_number(vm);
                 chan = (int)channel;
                 
                 if (chan < 1 || chan > 7) {
-                    vm_error(vm, "Invalid channel number");
+                    vm_error(vm, ERR_BAD_FILE_NUMBER, "Invalid channel number");
                     free(filename);
                     break;
                 }
@@ -1297,7 +1381,7 @@ void vm_execute(VMState *vm) {
             
             case OP_CLOSE: {
                 /* Stack: channel */
-                double channel = vm_pop(vm);
+                double channel = vm_pop_number(vm);
                 int chan = (int)channel;
                 
                 if (chan >= 1 && chan <= 7 && vm->file_handles[chan]) {
@@ -1321,21 +1405,21 @@ void vm_execute(VMState *vm) {
                 int chan;
                 int byte;
                 
-                channel = vm_pop(vm);
+                channel = vm_pop_number(vm);
                 chan = (int)channel;
                 
                 if (chan < 1 || chan > 7 || !vm->file_handles[chan]) {
-                    vm_error(vm, "Channel not open");
+                    vm_error(vm, ERR_FILE_NOT_FOUND, "Channel not open");
                     break;
                 }
                 
                 byte = fgetc(vm->file_handles[chan]);
                 if (byte == EOF) {
                     vm->file_status[chan] = 3;  /* EOF */
-                    vm_push(vm, 0.0);
+                    vm_push_number(vm, 0.0);
                 } else {
                     vm->file_status[chan] = 1;  /* OK */
-                    vm_push(vm, (double)byte);
+                    vm_push_number(vm, (double)byte);
                     vm->file_positions[chan]++;
                 }
                 
@@ -1350,12 +1434,12 @@ void vm_execute(VMState *vm) {
                 int chan;
                 int byte;
                 
-                value = vm_pop(vm);
-                channel = vm_pop(vm);
+                value = vm_pop_number(vm);
+                channel = vm_pop_number(vm);
                 chan = (int)channel;
                 
                 if (chan < 1 || chan > 7 || !vm->file_handles[chan]) {
-                    vm_error(vm, "Channel not open");
+                    vm_error(vm, ERR_FILE_NOT_FOUND, "Channel not open");
                     break;
                 }
                 
@@ -1379,11 +1463,11 @@ void vm_execute(VMState *vm) {
                 long sector;
                 long byte_pos;
                 
-                channel = vm_pop(vm);
+                channel = vm_pop_number(vm);
                 chan = (int)channel;
                 
                 if (chan < 1 || chan > 7 || !vm->file_handles[chan]) {
-                    vm_error(vm, "Channel not open");
+                    vm_error(vm, ERR_FILE_NOT_FOUND, "Channel not open");
                     break;
                 }
                 
@@ -1391,8 +1475,8 @@ void vm_execute(VMState *vm) {
                 sector = pos / 125;  /* Classic BASIC file positioning (125-byte sectors) */
                 byte_pos = pos % 125;
                 
-                vm_push(vm, (double)sector);
-                vm_push(vm, (double)byte_pos);
+                vm_push_number(vm, (double)sector);
+                vm_push_number(vm, (double)byte_pos);
                 vm->file_positions[chan] = pos;
                 
                 vm->pc++;
@@ -1407,13 +1491,13 @@ void vm_execute(VMState *vm) {
                 int chan;
                 long pos;
                 
-                byte_pos = vm_pop(vm);
-                sector = vm_pop(vm);
-                channel = vm_pop(vm);
+                byte_pos = vm_pop_number(vm);
+                sector = vm_pop_number(vm);
+                channel = vm_pop_number(vm);
                 chan = (int)channel;
                 
                 if (chan < 1 || chan > 7 || !vm->file_handles[chan]) {
-                    vm_error(vm, "Channel not open");
+                    vm_error(vm, ERR_FILE_NOT_FOUND, "Channel not open");
                     break;
                 }
                 
@@ -1431,13 +1515,13 @@ void vm_execute(VMState *vm) {
             
             case OP_STATUS: {
                 /* Stack: channel - Push: status */
-                double channel = vm_pop(vm);
+                double channel = vm_pop_number(vm);
                 int chan = (int)channel;
                 
                 if (chan < 1 || chan > 7) {
-                    vm_push(vm, 1.0);  /* Invalid channel */
+                    vm_push_number(vm, 1.0);  /* Invalid channel */
                 } else {
-                    vm_push(vm, (double)vm->file_status[chan]);
+                    vm_push_number(vm, (double)vm->file_status[chan]);
                 }
                 
                 vm->pc++;
@@ -1446,105 +1530,108 @@ void vm_execute(VMState *vm) {
             
             /* Math Functions */
             case OP_FUNC_SIN: {
-                double x = vm_pop(vm);
+                double x = vm_pop_number(vm);
                 if (vm->deg_mode) {
-                    vm_push(vm, sin(x * M_PI / 180.0));
+                    vm_push_number(vm, sin(x * M_PI / 180.0));
                 } else {
-                    vm_push(vm, sin(x));
+                    vm_push_number(vm, sin(x));
                 }
                 vm->pc++;
                 break;
             }
             
             case OP_FUNC_COS: {
-                double x = vm_pop(vm);
+                double x = vm_pop_number(vm);
                 if (vm->deg_mode) {
-                    vm_push(vm, cos(x * M_PI / 180.0));
+                    vm_push_number(vm, cos(x * M_PI / 180.0));
                 } else {
-                    vm_push(vm, cos(x));
+                    vm_push_number(vm, cos(x));
                 }
                 vm->pc++;
                 break;
             }
             
             case OP_FUNC_TAN: {
-                double x = vm_pop(vm);
+                double x = vm_pop_number(vm);
                 if (vm->deg_mode) {
-                    vm_push(vm, tan(x * M_PI / 180.0));
+                    vm_push_number(vm, tan(x * M_PI / 180.0));
                 } else {
-                    vm_push(vm, tan(x));
+                    vm_push_number(vm, tan(x));
                 }
                 vm->pc++;
                 break;
             }
             
             case OP_FUNC_ATN: {
-                double x = vm_pop(vm);
+                double x = vm_pop_number(vm);
                 if (vm->deg_mode) {
-                    vm_push(vm, atan(x) * 180.0 / M_PI);
+                    vm_push_number(vm, atan(x) * 180.0 / M_PI);
                 } else {
-                    vm_push(vm, atan(x));
+                    vm_push_number(vm, atan(x));
                 }
                 vm->pc++;
                 break;
             }
             
             case OP_FUNC_EXP: {
-                double x = vm_pop(vm);
-                vm_push(vm, exp(x));
+                double x = vm_pop_number(vm);
+                vm_push_number(vm, exp(x));
                 vm->pc++;
                 break;
             }
             
             case OP_FUNC_LOG: {
-                double x = vm_pop(vm);
+                double x = vm_pop_number(vm);
                 if (x <= 0) {
-                    vm_error(vm, "LOG OF NEGATIVE NUMBER");
+                    vm_error(vm, ERR_ILLEGAL_FUNCTION, "LOG OF NEGATIVE NUMBER");
+                    if (vm->trap_triggered) break;
                 } else {
-                    vm_push(vm, log(x));
+                    vm_push_number(vm, log(x));
                 }
                 vm->pc++;
                 break;
             }
             
             case OP_FUNC_CLOG: {
-                double x = vm_pop(vm);
+                double x = vm_pop_number(vm);
                 if (x <= 0) {
-                    vm_error(vm, "LOG OF NEGATIVE NUMBER");
+                    vm_error(vm, ERR_ILLEGAL_FUNCTION, "LOG OF NEGATIVE NUMBER");
+                    if (vm->trap_triggered) break;
                 } else {
-                    vm_push(vm, log10(x));
+                    vm_push_number(vm, log10(x));
                 }
                 vm->pc++;
                 break;
             }
             
             case OP_FUNC_SQR: {
-                double x = vm_pop(vm);
+                double x = vm_pop_number(vm);
                 if (x < 0) {
-                    vm_error(vm, "SQRT OF NEGATIVE NUMBER");
+                    vm_error(vm, ERR_ILLEGAL_FUNCTION, "SQRT OF NEGATIVE NUMBER");
+                    if (vm->trap_triggered) break;
                 } else {
-                    vm_push(vm, sqrt(x));
+                    vm_push_number(vm, sqrt(x));
                 }
                 vm->pc++;
                 break;
             }
             
             case OP_FUNC_ABS: {
-                double x = vm_pop(vm);
-                vm_push(vm, fabs(x));
+                double x = vm_pop_number(vm);
+                vm_push_number(vm, fabs(x));
                 vm->pc++;
                 break;
             }
             
             case OP_FUNC_INT: {
-                double x = vm_pop(vm);
-                vm_push(vm, floor(x));
+                double x = vm_pop_number(vm);
+                vm_push_number(vm, floor(x));
                 vm->pc++;
                 break;
             }
             
             case OP_FUNC_RND: {
-                double x = vm_pop(vm);
+                double x = vm_pop_number(vm);
                 double result;
                 
                 if (x < 0) {
@@ -1570,35 +1657,35 @@ void vm_execute(VMState *vm) {
                     vm->last_rnd = result;
                 }
                 
-                vm_push(vm, result);
+                vm_push_number(vm, result);
                 vm->pc++;
                 break;
             }
             
             case OP_FUNC_SGN: {
-                double x = vm_pop(vm);
-                if (x > 0) vm_push(vm, 1.0);
-                else if (x < 0) vm_push(vm, -1.0);
-                else vm_push(vm, 0.0);
+                double x = vm_pop_number(vm);
+                if (x > 0) vm_push_number(vm, 1.0);
+                else if (x < 0) vm_push_number(vm, -1.0);
+                else vm_push_number(vm, 0.0);
                 vm->pc++;
                 break;
             }
             
             case OP_FUNC_PEEK: {
                 /* PEEK(address) - returns byte value at memory location */
-                double addr_d = vm_pop(vm);
+                double addr_d = vm_pop_number(vm);
                 int addr = (int)addr_d;
                 unsigned char value = 0;
                 
                 /* Validate address range (0-65535) */
                 if (addr < 0 || addr > 65535) {
-                    vm_error(vm, "ILLEGAL ADDRESS IN PEEK");
+                    vm_error(vm, ERR_ILLEGAL_FUNCTION, "ILLEGAL ADDRESS IN PEEK");
                     break;
                 }
                 
                 /* Read from simulated memory buffer */
                 value = vm->memory[addr];
-                vm_push(vm, (double)value);
+                vm_push_number(vm, (double)value);
                 
                 vm->pc++;
                 break;
@@ -1606,14 +1693,14 @@ void vm_execute(VMState *vm) {
             
             case OP_POKE: {
                 /* POKE address, value - writes byte value to memory location */
-                double value_d = vm_pop(vm);
-                double addr_d = vm_pop(vm);
+                double value_d = vm_pop_number(vm);
+                double addr_d = vm_pop_number(vm);
                 int addr = (int)addr_d;
                 int byte_val = (int)value_d;
                 
                 /* Validate address range (0-65535) */
                 if (addr < 0 || addr > 65535) {
-                    vm_error(vm, "ILLEGAL ADDRESS IN POKE");
+                    vm_error(vm, ERR_ILLEGAL_FUNCTION, "ILLEGAL ADDRESS IN POKE");
                     break;
                 }
                 
@@ -1629,7 +1716,7 @@ void vm_execute(VMState *vm) {
             
             /* Array Operations */
             case OP_DIM_1D: {
-                double size_d = vm_pop(vm);
+                double size_d = vm_pop_number(vm);
                 size_t size = (size_t)size_d + 1;  /* Classic BASIC: DIM A(10) allocates 0-10 */
                 int is_string = vm->arrays[inst.operand].is_string;
                 size_t i;
@@ -1652,7 +1739,7 @@ void vm_execute(VMState *vm) {
                 if (is_string) {
                     vm->arrays[inst.operand].u.str_data = calloc(size, sizeof(char*));
                     for (i = 0; i < size; i++) {
-                        vm->arrays[inst.operand].u.str_data[i] = my_strdup("");
+                        vm->arrays[inst.operand].u.str_data[i] = basset_strdup("");
                     }
                 } else {
                     vm->arrays[inst.operand].u.data = calloc(size, sizeof(double));
@@ -1663,8 +1750,8 @@ void vm_execute(VMState *vm) {
             }
             
             case OP_DIM_2D: {
-                double col_d = vm_pop(vm);
-                double row_d = vm_pop(vm);
+                double col_d = vm_pop_number(vm);
+                double row_d = vm_pop_number(vm);
                 size_t rows = (size_t)row_d + 1;
                 size_t cols = (size_t)col_d + 1;
                 int is_string = vm->arrays[inst.operand].is_string;
@@ -1688,7 +1775,7 @@ void vm_execute(VMState *vm) {
                 if (is_string) {
                     vm->arrays[inst.operand].u.str_data = calloc(rows * cols, sizeof(char*));
                     for (i = 0; i < rows * cols; i++) {
-                        vm->arrays[inst.operand].u.str_data[i] = my_strdup("");
+                        vm->arrays[inst.operand].u.str_data[i] = basset_strdup("");
                     }
                 } else {
                     vm->arrays[inst.operand].u.data = calloc(rows * cols, sizeof(double));
@@ -1699,7 +1786,7 @@ void vm_execute(VMState *vm) {
             }
             
             case OP_ARRAY_GET_1D: {
-                double idx_d = vm_pop(vm);
+                double idx_d = vm_pop_number(vm);
                 size_t idx = (size_t)idx_d;
                 
                 /* Auto-dimension if not already dimensioned */
@@ -1712,11 +1799,10 @@ void vm_execute(VMState *vm) {
                 }
                 
                 if (idx >= vm->arrays[inst.operand].dim1) {
-                    fprintf(stderr, "Array index %lu out of bounds (max %lu) for array slot %d at PC=%d\n", 
-                            (unsigned long)idx, (unsigned long)(vm->arrays[inst.operand].dim1 - 1), inst.operand, vm->pc);
-                    vm_error(vm, "ARRAY BOUNDS ERROR");
+                    vm_error(vm, ERR_SUBSCRIPT_RANGE, "ARRAY BOUNDS ERROR");
+                    if (vm->trap_triggered) break;
                 } else {
-                    vm_push(vm, vm->arrays[inst.operand].u.data[idx]);
+                    vm_push_number(vm, vm->arrays[inst.operand].u.data[idx]);
                 }
                 
                 vm->pc++;
@@ -1728,12 +1814,12 @@ void vm_execute(VMState *vm) {
                 size_t idx;
                 
                 if (vm->stack_top < 2) {
-                    vm_error(vm, "STACK UNDERFLOW");
+                    vm_error(vm, ERR_OVERFLOW, "STACK UNDERFLOW");
                     break;
                 }
                 
-                value = vm_pop(vm);
-                idx_d = vm_pop(vm);
+                value = vm_pop_number(vm);
+                idx_d = vm_pop_number(vm);
                 idx = (size_t)idx_d;
                 
                 /* Auto-dimension if not already dimensioned */
@@ -1746,7 +1832,8 @@ void vm_execute(VMState *vm) {
                 }
                 
                 if (idx >= vm->arrays[inst.operand].dim1) {
-                    vm_error(vm, "ARRAY BOUNDS ERROR");
+                    vm_error(vm, ERR_SUBSCRIPT_RANGE, "ARRAY BOUNDS ERROR");
+                    if (vm->trap_triggered) break;
                 } else {
                     vm->arrays[inst.operand].u.data[idx] = value;
                 }
@@ -1756,8 +1843,8 @@ void vm_execute(VMState *vm) {
             }
             
             case OP_ARRAY_GET_2D: {
-                double col_d = vm_pop(vm);
-                double row_d = vm_pop(vm);
+                double col_d = vm_pop_number(vm);
+                double row_d = vm_pop_number(vm);
                 size_t row = (size_t)row_d;
                 size_t col = (size_t)col_d;
                 size_t cols;
@@ -1774,9 +1861,10 @@ void vm_execute(VMState *vm) {
                 cols = vm->arrays[inst.operand].dim2;
                 
                 if (row >= vm->arrays[inst.operand].dim1 || col >= cols) {
-                    vm_error(vm, "ARRAY BOUNDS ERROR");
+                    vm_error(vm, ERR_SUBSCRIPT_RANGE, "ARRAY BOUNDS ERROR");
+                    if (vm->trap_triggered) break;
                 } else {
-                    vm_push(vm, vm->arrays[inst.operand].u.data[row * cols + col]);
+                    vm_push_number(vm, vm->arrays[inst.operand].u.data[row * cols + col]);
                 }
                 
                 vm->pc++;
@@ -1784,9 +1872,9 @@ void vm_execute(VMState *vm) {
             }
             
             case OP_ARRAY_SET_2D: {
-                double value = vm_pop(vm);
-                double col_d = vm_pop(vm);
-                double row_d = vm_pop(vm);
+                double value = vm_pop_number(vm);
+                double col_d = vm_pop_number(vm);
+                double row_d = vm_pop_number(vm);
                 size_t row = (size_t)row_d;
                 size_t col = (size_t)col_d;
                 size_t cols;
@@ -1803,7 +1891,8 @@ void vm_execute(VMState *vm) {
                 cols = vm->arrays[inst.operand].dim2;
                 
                 if (row >= vm->arrays[inst.operand].dim1 || col >= cols) {
-                    vm_error(vm, "ARRAY BOUNDS ERROR");
+                    vm_error(vm, ERR_SUBSCRIPT_RANGE, "ARRAY BOUNDS ERROR");
+                    if (vm->trap_triggered) break;
                 } else {
                     vm->arrays[inst.operand].u.data[row * cols + col] = value;
                 }
@@ -1814,7 +1903,7 @@ void vm_execute(VMState *vm) {
             
             /* String Array Operations */
             case OP_STR_ARRAY_GET_1D: {
-                double idx_d = vm_pop(vm);
+                double idx_d = vm_pop_number(vm);
                 size_t idx = (size_t)idx_d;
                 
                 /* Auto-dimension if not already dimensioned */
@@ -1826,14 +1915,15 @@ void vm_execute(VMState *vm) {
                     vm->arrays[inst.operand].is_string = 1;
                     vm->arrays[inst.operand].u.str_data = calloc(11, sizeof(char*));
                     for (i = 0; i < 11; i++) {
-                        vm->arrays[inst.operand].u.str_data[i] = my_strdup("");
+                        vm->arrays[inst.operand].u.str_data[i] = basset_strdup("");
                     }
                 }
                 
                 if (idx >= vm->arrays[inst.operand].dim1) {
-                    vm_error(vm, "ARRAY BOUNDS ERROR");
+                    vm_error(vm, ERR_SUBSCRIPT_RANGE, "ARRAY BOUNDS ERROR");
+                    if (vm->trap_triggered) break;
                 } else {
-                    vm_str_push(vm, vm->arrays[inst.operand].u.str_data[idx]);
+                    vm_push_string(vm, basset_strdup(vm->arrays[inst.operand].u.str_data[idx]));
                 }
                 
                 vm->pc++;
@@ -1841,17 +1931,17 @@ void vm_execute(VMState *vm) {
             }
             
             case OP_STR_ARRAY_SET_1D: {
-                const char *value;
+                char *value;
                 double idx_d;
                 size_t idx;
                 
-                if (vm->str_stack_top < 1 || vm->stack_top < 1) {
-                    vm_error(vm, "STACK UNDERFLOW");
+                if (vm->stack_top < 2) {
+                    vm_error(vm, ERR_OVERFLOW, "STACK UNDERFLOW");
                     break;
                 }
                 
-                value = vm_str_pop(vm);
-                idx_d = vm_pop(vm);
+                value = vm_pop_string(vm);
+                idx_d = vm_pop_number(vm);
                 idx = (size_t)idx_d;
                 
                 /* Auto-dimension if not already dimensioned */
@@ -1863,17 +1953,19 @@ void vm_execute(VMState *vm) {
                     vm->arrays[inst.operand].is_string = 1;
                     vm->arrays[inst.operand].u.str_data = calloc(11, sizeof(char*));
                     for (i = 0; i < 11; i++) {
-                        vm->arrays[inst.operand].u.str_data[i] = my_strdup("");
+                        vm->arrays[inst.operand].u.str_data[i] = basset_strdup("");
                     }
                 }
                 
                 if (idx >= vm->arrays[inst.operand].dim1) {
-                    vm_error(vm, "ARRAY BOUNDS ERROR");
+                    vm_error(vm, ERR_SUBSCRIPT_RANGE, "ARRAY BOUNDS ERROR");
+                    if (vm->trap_triggered) break;
+                    free(value);
                 } else {
                     if (vm->arrays[inst.operand].u.str_data[idx]) {
                         free(vm->arrays[inst.operand].u.str_data[idx]);
                     }
-                    vm->arrays[inst.operand].u.str_data[idx] = my_strdup(value);
+                    vm->arrays[inst.operand].u.str_data[idx] = value;
                 }
                 
                 vm->pc++;
@@ -1881,8 +1973,8 @@ void vm_execute(VMState *vm) {
             }
             
             case OP_STR_ARRAY_GET_2D: {
-                double col_d = vm_pop(vm);
-                double row_d = vm_pop(vm);
+                double col_d = vm_pop_number(vm);
+                double row_d = vm_pop_number(vm);
                 size_t row = (size_t)row_d;
                 size_t col = (size_t)col_d;
                 size_t cols;
@@ -1896,16 +1988,17 @@ void vm_execute(VMState *vm) {
                     vm->arrays[inst.operand].is_string = 1;
                     vm->arrays[inst.operand].u.str_data = calloc(11 * 11, sizeof(char*));
                     for (i = 0; i < 11 * 11; i++) {
-                        vm->arrays[inst.operand].u.str_data[i] = my_strdup("");
+                        vm->arrays[inst.operand].u.str_data[i] = basset_strdup("");
                     }
                 }
                 
                 cols = vm->arrays[inst.operand].dim2;
                 
                 if (row >= vm->arrays[inst.operand].dim1 || col >= cols) {
-                    vm_error(vm, "ARRAY BOUNDS ERROR");
+                    vm_error(vm, ERR_SUBSCRIPT_RANGE, "ARRAY BOUNDS ERROR");
+                    if (vm->trap_triggered) break;
                 } else {
-                    vm_str_push(vm, vm->arrays[inst.operand].u.str_data[row * cols + col]);
+                    vm_push_string(vm, basset_strdup(vm->arrays[inst.operand].u.str_data[row * cols + col]));
                 }
                 
                 vm->pc++;
@@ -1913,9 +2006,9 @@ void vm_execute(VMState *vm) {
             }
             
             case OP_STR_ARRAY_SET_2D: {
-                const char *value = vm_str_pop(vm);
-                double col_d = vm_pop(vm);
-                double row_d = vm_pop(vm);
+                char *value = vm_pop_string(vm);
+                double col_d = vm_pop_number(vm);
+                double row_d = vm_pop_number(vm);
                 size_t row = (size_t)row_d;
                 size_t col = (size_t)col_d;
                 size_t cols;
@@ -1929,19 +2022,21 @@ void vm_execute(VMState *vm) {
                     vm->arrays[inst.operand].is_string = 1;
                     vm->arrays[inst.operand].u.str_data = calloc(11 * 11, sizeof(char*));
                     for (i = 0; i < 11 * 11; i++) {
-                        vm->arrays[inst.operand].u.str_data[i] = my_strdup("");
+                        vm->arrays[inst.operand].u.str_data[i] = basset_strdup("");
                     }
                 }
                 
                 cols = vm->arrays[inst.operand].dim2;
                 
                 if (row >= vm->arrays[inst.operand].dim1 || col >= cols) {
-                    vm_error(vm, "ARRAY BOUNDS ERROR");
+                    vm_error(vm, ERR_SUBSCRIPT_RANGE, "ARRAY BOUNDS ERROR");
+                    if (vm->trap_triggered) break;
+                    free(value);
                 } else {
                     if (vm->arrays[inst.operand].u.str_data[row * cols + col]) {
                         free(vm->arrays[inst.operand].u.str_data[row * cols + col]);
                     }
-                    vm->arrays[inst.operand].u.str_data[row * cols + col] = my_strdup(value);
+                    vm->arrays[inst.operand].u.str_data[row * cols + col] = value;
                 }
                 
                 vm->pc++;
@@ -1951,7 +2046,8 @@ void vm_execute(VMState *vm) {
             /* DATA/READ Operations */
             case OP_DATA_READ_NUM: {
                 if (vm->data_pointer >= vm->program->data_count) {
-                    vm_error(vm, "OUT OF DATA");
+                    vm_error(vm, ERR_OUT_OF_DATA, "OUT OF DATA");
+                    if (vm->trap_triggered) break;
                 } else {
                     DataEntry *entry = &vm->program->data_entries[vm->data_pointer++];
                     
@@ -1968,7 +2064,7 @@ void vm_execute(VMState *vm) {
                         /* NULL data item - convert to 0 for numeric variable */
                         vm->num_vars[inst.operand] = 0;
                     } else {
-                        vm_error(vm, "TYPE MISMATCH IN DATA");
+                        vm_error(vm, ERR_TYPE_MISMATCH, "TYPE MISMATCH IN DATA");
                     }
                 }
                 
@@ -1978,7 +2074,8 @@ void vm_execute(VMState *vm) {
             
             case OP_DATA_READ_STR: {
                 if (vm->data_pointer >= vm->program->data_count) {
-                    vm_error(vm, "OUT OF DATA");
+                    vm_error(vm, ERR_OUT_OF_DATA, "OUT OF DATA");
+                    if (vm->trap_triggered) break;
                 } else {
                     DataEntry *entry = &vm->program->data_entries[vm->data_pointer++];
                     char buffer[64];
@@ -1996,14 +2093,14 @@ void vm_execute(VMState *vm) {
                         /* NULL data item - convert to empty string for string variable */
                         str_value = "";
                     } else {
-                        vm_error(vm, "TYPE MISMATCH IN DATA");
+                        vm_error(vm, ERR_TYPE_MISMATCH, "TYPE MISMATCH IN DATA");
                         break;
                     }
                     
                     if (vm->str_vars[inst.operand]) {
                         free(vm->str_vars[inst.operand]);
                     }
-                    vm->str_vars[inst.operand] = my_strdup(str_value);
+                    vm->str_vars[inst.operand] = basset_strdup(str_value);
                 }
                 
                 vm->pc++;
@@ -2042,16 +2139,16 @@ void vm_execute(VMState *vm) {
             /* File I/O Operations */
             case OP_XIO: {
                 /* Stack: command, channel, aux1, aux2, device_string (TOS) */
-                char *device = vm_str_pop(vm);
+                char *device = vm_pop_string(vm);
                 int channel, command;
-                (void)vm_pop(vm);  /* aux2 - not used */
-                (void)vm_pop(vm);  /* aux1 - not used */
-                channel = (int)vm_pop(vm);
-                command = (int)vm_pop(vm);
+                (void)vm_pop_number(vm);  /* aux2 - not used */
+                (void)vm_pop_number(vm);  /* aux1 - not used */
+                channel = (int)vm_pop_number(vm);
+                command = (int)vm_pop_number(vm);
                 
                 if (channel < 1 || channel >= 8) {
                     free(device);
-                    vm_error(vm, "Invalid channel number");
+                    vm_error(vm, ERR_BAD_FILE_NUMBER, "Invalid channel number");
                     break;
                 }
                 
@@ -2063,7 +2160,7 @@ void vm_execute(VMState *vm) {
                         vm->file_handles[channel] = fopen(device, "rb");
                         if (!vm->file_handles[channel]) {
                             free(device);
-                            vm_error(vm, "Cannot open file for reading");
+                            vm_error(vm, ERR_FILE_NOT_FOUND, "Cannot open file for reading");
                         }
                         break;
                         
@@ -2074,7 +2171,7 @@ void vm_execute(VMState *vm) {
                         vm->file_handles[channel] = fopen(device, "wb");
                         if (!vm->file_handles[channel]) {
                             free(device);
-                            vm_error(vm, "Cannot open file for writing");
+                            vm_error(vm, ERR_DEVICE_IO, "Cannot open file for writing");
                         }
                         break;
                         
@@ -2090,13 +2187,13 @@ void vm_execute(VMState *vm) {
                             printf("File '%s' deleted\n", device);
                         } else {
                             free(device);
-                            vm_error(vm, "Cannot delete file");
+                            vm_error(vm, ERR_DEVICE_IO, "Cannot delete file");
                         }
                         break;
                         
                     default:
                         free(device);
-                        vm_error(vm, "Unsupported XIO command");
+                        vm_error(vm, ERR_ILLEGAL_FUNCTION, "Unsupported XIO command");
                         break;
                 }
                 
@@ -2125,7 +2222,7 @@ void vm_execute(VMState *vm) {
             
             case OP_RANDOMIZE: {
                 /* Pop seed value from stack */
-                double seed_val = vm_pop(vm);
+                double seed_val = vm_pop_number(vm);
                 uint32_t seed;
                 
                 /* Use provided value as seed (could be from TIMER or numeric expression) */
@@ -2193,10 +2290,16 @@ void vm_execute(VMState *vm) {
             }
             
             default: {
-                fprintf(stderr, "Unknown opcode: 0x%02X at PC=%d\n", inst.opcode, vm->pc);
                 vm->running = 0;
                 break;
             }
+        }
+        
+        /* If TRAP was triggered during this instruction, vm_error already set PC */
+        /* to the trap handler. Ignore any PC increments that happened after the error. */
+        if (vm->trap_triggered) {
+            vm->trap_triggered = 0;
+            /* PC is already set to trap handler by vm_error, just continue */
         }
     }
 }

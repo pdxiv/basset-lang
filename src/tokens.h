@@ -82,6 +82,7 @@
 #define TOK_CLEFT   0x75  /* LEFT$ */
 #define TOK_CRIGHT  0x76  /* RIGHT$ */
 #define TOK_CMID    0x77  /* MID$ */
+#define TOK_CERR    0x7A  /* ERR - Error code function */
 #define TOK_CTAB    0x79  /* TAB - moved to avoid collision with TOK_ELSE (0x78) */
 
 /* Statements (0x55-) */

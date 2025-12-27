@@ -2,18 +2,10 @@
 #define _POSIX_C_SOURCE 200809L
 #include "parser.h"
 #include "syntax_tables.h"
+#include "util.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-
-/* C89 compatible strdup (POSIX strdup not in C89 standard) */
-static char* my_strdup(const char *s) {
-    char *d;
-    if (!s) return NULL;
-    d = malloc(strlen(s) + 1);
-    if (d) strcpy(d, s);
-    return d;
-}
 
 /* Forward declarations */
 static ParseNode* parse_nonterminal(Parser *p, NonTerminal nt);
@@ -342,7 +334,7 @@ static ParseNode* parse_string_literal(Parser *p, ParseNode *left) {
     Token *tok = tokenizer_peek(p->tokenizer);
     ParseNode *node = node_create(NODE_CONSTANT);
     node->token = TOK_STRING;
-    node->text = my_strdup(tok->text);
+    node->text = basset_strdup(tok->text);
     tokenizer_next(p->tokenizer);
     return node;
 }
@@ -351,7 +343,7 @@ static ParseNode* parse_string_literal(Parser *p, ParseNode *left) {
 static ParseNode* parse_variable(Parser *p, ParseNode *left) {
     Token *tok = tokenizer_peek(p->tokenizer);
     ParseNode *var = node_create(NODE_VARIABLE);
-    var->text = my_strdup(tok->text);
+    var->text = basset_strdup(tok->text);
     var->token = TOK_IDENT;
     tokenizer_next(p->tokenizer);
     
@@ -885,7 +877,7 @@ static ParseNode* parse_nonterminal(Parser *p, NonTerminal nt) {
                         /* Match - create token node */
                         if (tok->type == TOK_IDENT) {
                             child = node_create(NODE_VARIABLE);
-                            child->text = my_strdup(tok->text);
+                            child->text = basset_strdup(tok->text);
                             child->token = tok->type;
                         } else if (tok->type == TOK_NUMBER) {
                             child = node_create(NODE_CONSTANT);
@@ -893,7 +885,7 @@ static ParseNode* parse_nonterminal(Parser *p, NonTerminal nt) {
                             child->token = tok->type;
                         } else if (tok->type == TOK_STRING) {
                             child = node_create(NODE_CONSTANT);
-                            child->text = my_strdup(tok->text);
+                            child->text = basset_strdup(tok->text);
                             child->token = tok->type;
                         } else {
                             child = node_create(NODE_OPERATOR);

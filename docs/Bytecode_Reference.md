@@ -34,53 +34,53 @@ typedef struct {
 ## Stack Operations (0x00-0x06)
 
 ### OP_PUSH_CONST (0x00)
-**Push constant to numeric stack**
+**Push numeric constant**
 
 - **Operand**: Index into constant pool
 - **Stack Effect**: `[] → [value]`
-- **Description**: Pushes a numeric constant from the constant pool onto the numeric stack
+- **Description**: Pushes a numeric constant from the constant pool onto the stack (as tagged numeric value)
 
 ### OP_PUSH_VAR (0x01)
 **Push numeric variable value**
 
 - **Operand**: Variable slot number (0-127)
 - **Stack Effect**: `[] → [value]`
-- **Description**: Reads a numeric variable and pushes its value onto the numeric stack
+- **Description**: Reads a numeric variable and pushes its value onto the stack (as tagged numeric value)
 
 ### OP_POP_VAR (0x02)
 **Pop value to numeric variable**
 
 - **Operand**: Variable slot number (0-127)
 - **Stack Effect**: `[value] → []`
-- **Description**: Pops a value from numeric stack and stores it in the specified variable slot
+- **Description**: Pops a numeric value from stack and stores it in the specified variable slot
 
 ### OP_DUP (0x03)
-**Duplicate top of numeric stack**
+**Duplicate top of stack**
 
 - **Operand**: Unused
 - **Stack Effect**: `[value] → [value, value]`
-- **Description**: Duplicates the top value on the numeric stack
+- **Description**: Duplicates the top value on the stack
 
 ### OP_POP (0x04)
-**Discard top of numeric stack**
+**Discard top of stack**
 
 - **Operand**: Unused
 - **Stack Effect**: `[value] → []`
-- **Description**: Removes and discards the top value from the numeric stack
+- **Description**: Removes and discards the top value from the stack
 
 ### OP_STR_POP_VAR (0x05)
 **Pop string to variable**
 
 - **Operand**: Variable slot number (0-127)
-- **Stack Effect**: `[string] → []` (string stack)
-- **Description**: Pops a string from the string stack and stores it in the specified variable slot
+- **Stack Effect**: `[string] → []`
+- **Description**: Pops a string value from the stack and stores it in the specified variable slot
 
 ### OP_STR_PUSH_VAR (0x06)
 **Push string variable value**
 
 - **Operand**: Variable slot number (0-127)
-- **Stack Effect**: `[] → [string]` (string stack)
-- **Description**: Reads a string variable and pushes its value onto the string stack
+- **Stack Effect**: `[] → [string]`
+- **Description**: Reads a string variable and pushes its value onto the stack (as tagged string value)
 
 ---
 
@@ -204,62 +204,62 @@ BASIC uses numeric logic: 0 = false, non-zero = true.
 **Push string constant**
 
 - **Operand**: Index into string constant table
-- **Stack Effect**: `[] → [string]` (string stack)
-- **Description**: Pushes a string constant onto the string stack
+- **Stack Effect**: `[] → [string]`
+- **Description**: Pushes a string constant onto the stack (as tagged string value)
 
 ### OP_STR_CONCAT (0x31)
 **String concatenation**
 
-- **Stack Effect**: `[str1, str2] → [str1+str2]` (string stack)
-- **Description**: Pops two strings, concatenates them, pushes result
+- **Stack Effect**: `[str1, str2] → [str1+str2]`
+- **Description**: Pops two string values, concatenates them, pushes result string
 
 ### OP_STR_LEN (0x32)
 **String length (LEN)**
 
-- **Stack Effect**: `[string] → [] (string stack), [] → [length] (numeric stack)`
-- **Description**: Pops string from string stack, pushes its length to numeric stack
+- **Stack Effect**: `[string] → [length]`
+- **Description**: Pops string value, pushes its length as numeric value
 
 ### OP_STR_VAL (0x33)
 **String to number (VAL)**
 
-- **Stack Effect**: `[string] → [] (string stack), [] → [value] (numeric stack)`
-- **Description**: Pops string, converts to number, pushes to numeric stack
+- **Stack Effect**: `[string] → [value]`
+- **Description**: Pops string value, converts to number, pushes as numeric value
 
 ### OP_STR_CHR (0x34)
 **Number to character (CHR$)**
 
-- **Stack Effect**: `[code] → [] (numeric stack), [] → [char] (string stack)`
-- **Description**: Pops ASCII code, pushes single-character string to string stack
+- **Stack Effect**: `[code] → [char]`
+- **Description**: Pops numeric ASCII code, pushes single-character string value
 
 ### OP_STR_STR (0x35)
 **Number to string (STR$)**
 
-- **Stack Effect**: `[value] → [] (numeric stack), [] → [string] (string stack)`
-- **Description**: Pops number, converts to string representation, pushes to string stack
+- **Stack Effect**: `[value] → [string]`
+- **Description**: Pops numeric value, converts to string representation, pushes string value
 
 ### OP_STR_ASC (0x36)
 **Character to ASCII (ASC)**
 
-- **Stack Effect**: `[string] → [] (string stack), [] → [code] (numeric stack)`
-- **Description**: Pops string, pushes ASCII code of first character to numeric stack
+- **Stack Effect**: `[string] → [code]`
+- **Description**: Pops string value, pushes ASCII code of first character as numeric value
 
 ### OP_STR_LEFT (0x37)
 **Left substring (LEFT$)**
 
 - **Stack Effect**: `[string, count] → [substring]`
-- **Description**: Pops count from numeric stack, pops string from string stack, pushes leftmost `count` characters to string stack
+- **Description**: Pops numeric count, pops string value, pushes leftmost `count` characters as string value
 
 ### OP_STR_RIGHT (0x38)
 **Right substring (RIGHT$)**
 
 - **Stack Effect**: `[string, count] → [substring]`
-- **Description**: Pops count from numeric stack, pops string from string stack, pushes rightmost `count` characters to string stack
+- **Description**: Pops numeric count, pops string value, pushes rightmost `count` characters as string value
 
 ### OP_STR_MID (0x39)
 **Mid substring (MID$ with 3 args)**
 
 - **Stack Effect**: `[string, start, length] → [substring]`
-- **Description**: Pops length and start from numeric stack, pops string from string stack, pushes substring starting at `start` with `length` characters to string stack
+- **Description**: Pops numeric length and start, pops string value, pushes substring starting at `start` with `length` characters
 
 ### OP_STR_MID_2 (0x3A)
 **Mid substring (MID$ with 2 args)**
@@ -317,29 +317,29 @@ BASIC uses numeric logic: 0 = false, non-zero = true.
 **Get 1D string array element**
 
 - **Operand**: Variable slot number
-- **Stack Effect**: `[index] → [string]` (numeric then string stack)
-- **Description**: Pops index from numeric stack, pushes array[index] to string stack
+- **Stack Effect**: `[index] → [string]`
+- **Description**: Pops numeric index, pushes array[index] as string value
 
 ### OP_STR_ARRAY_SET_1D (0x47)
 **Set 1D string array element**
 
 - **Operand**: Variable slot number
-- **Stack Effect**: `[index] (numeric), [string] (string) → []`
-- **Description**: Pops string from string stack, pops index from numeric stack, stores string in array[index]
+- **Stack Effect**: `[index, string] → []`
+- **Description**: Pops string value, pops numeric index, stores string in array[index]
 
 ### OP_STR_ARRAY_GET_2D (0x48)
 **Get 2D string array element**
 
 - **Operand**: Variable slot number
 - **Stack Effect**: `[row, col] → [string]`
-- **Description**: Pops col and row from numeric stack, pushes array[row, col] to string stack
+- **Description**: Pops numeric col and row, pushes array[row, col] as string value
 
 ### OP_STR_ARRAY_SET_2D (0x49)
 **Set 2D string array element**
 
 - **Operand**: Variable slot number
-- **Stack Effect**: `[row, col] (numeric), [string] (string) → []`
-- **Description**: Pops string from string stack, pops col and row from numeric stack, stores string in array[row, col]
+- **Stack Effect**: `[row, col, string] → []`
+- **Description**: Pops string value, pops numeric col and row, stores string in array[row, col]
 
 ---
 
@@ -423,13 +423,13 @@ BASIC uses numeric logic: 0 = false, non-zero = true.
 **Print numeric value**
 
 - **Stack Effect**: `[value] → []`
-- **Description**: Pops value from numeric stack, prints to current output channel (default: screen)
+- **Description**: Pops numeric value from stack, prints to current output channel (default: screen)
 
 ### OP_PRINT_STR (0x61)
 **Print string value**
 
-- **Stack Effect**: `[string] → []` (string stack)
-- **Description**: Pops string from string stack, prints to current output channel
+- **Stack Effect**: `[string] → []`
+- **Description**: Pops string value from stack, prints to current output channel
 
 ### OP_PRINT_NEWLINE (0x62)
 **Print newline**
@@ -473,8 +473,8 @@ BASIC uses numeric logic: 0 = false, non-zero = true.
 ### OP_INPUT_PROMPT (0x69)
 **Display input prompt**
 
-- **Stack Effect**: `[prompt] → []` (string stack)
-- **Description**: Pops prompt string, displays it before input
+- **Stack Effect**: `[prompt] → []`
+- **Description**: Pops prompt string value, displays it before input
 
 ### OP_OPEN (0x6A)
 **Open file/device**
@@ -548,7 +548,7 @@ BASIC uses numeric logic: 0 = false, non-zero = true.
 
 ## Math Functions (0x75-0x80)
 
-All math functions pop operands from numeric stack and push results to numeric stack.
+All math functions pop numeric operands from stack and push numeric results to stack.
 
 ### OP_FUNC_SIN (0x75)
 **Sine function**
@@ -705,12 +705,25 @@ All math functions pop operands from numeric stack and push results to numeric s
 
 ### Stack Architecture
 
-The VM uses **dual stacks**:
+The VM uses **tagged values** — a technique where each stack entry carries both its data and a type identifier:
 
-1. **Numeric Stack**: For numeric values (double precision floating-point)
-2. **String Stack**: For string values (dynamically allocated char*)
+```c
+typedef struct {
+    ValueType type;      // VAL_NUMBER or VAL_STRING
+    union {
+        double number;   // Numeric value (if type == VAL_NUMBER)
+        char *string;    // String pointer (if type == VAL_STRING)
+    } data;
+} Value;
+```
 
-Most operations work on one stack or the other. Some operations (like STR$, VAL, etc.) transfer values between stacks.
+**Key Properties:**
+- **Single Stack**: One stack holds both numeric and string values safely
+- **Type Safety**: Operations check the type tag and raise "TYPE MISMATCH" if incorrect
+- **Runtime Validation**: Helper functions (`vm_pop_number()`, `vm_pop_string()`) validate types
+- **Industry Standard**: Matches architectures used by JVM, CLR, Lua, Python, JavaScript V8
+
+When an operation pops a value, it checks the type tag to ensure it's operating on the correct data type. This allows safe mixing of numbers and strings on the same stack without confusion.
 
 ### Variable Storage
 
